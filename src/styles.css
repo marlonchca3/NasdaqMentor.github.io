@@ -206,6 +206,211 @@ h1 {
   margin: 14px 0 0;
 }
 
+.pomodoro-panel {
+  margin-top: 22px;
+  padding: 20px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(11, 24, 54, 0.95), rgba(10, 21, 49, 0.92));
+  border: 1px solid rgba(114, 146, 207, 0.18);
+}
+
+.pomodoro-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.pomodoro-eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(124, 181, 255, 0.95);
+}
+
+.pomodoro-head h2 {
+  margin: 4px 0;
+  font-size: 2rem;
+}
+
+.pomodoro-copy {
+  margin: 0;
+  color: var(--text-soft);
+  max-width: 680px;
+}
+
+.pomodoro-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.pomodoro-badges span {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(44, 123, 255, 0.18);
+  border: 1px solid rgba(82, 159, 255, 0.35);
+  color: #d4e8ff;
+  font-weight: 700;
+}
+
+.pomodoro-goal-row {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+}
+
+.pomodoro-goal-card {
+  border-radius: 18px;
+  border: 1px solid rgba(114, 146, 207, 0.22);
+  background: rgba(8, 20, 45, 0.72);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pomodoro-goal-card span {
+  color: rgba(165, 193, 236, 0.86);
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+
+.pomodoro-goal-card input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(91, 136, 209, 0.3);
+  background: rgba(1, 8, 24, 0.9);
+  color: #edf4ff;
+  font-size: 1.55rem;
+  font-weight: 700;
+  padding: 12px 14px;
+}
+
+.pomodoro-goal-card.static strong {
+  font-size: 2.1rem;
+}
+
+.pomodoro-timer-card {
+  margin-top: 14px;
+  border-radius: 24px;
+  padding: 20px 22px;
+  border: 1px solid rgba(87, 194, 198, 0.24);
+  background: linear-gradient(100deg, rgba(18, 71, 66, 0.64), rgba(18, 68, 100, 0.48));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.phase-pill {
+  width: max-content;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(154, 216, 227, 0.26);
+  background: rgba(151, 210, 221, 0.15);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.8rem;
+  color: #dff7fb;
+  font-weight: 700;
+}
+
+.pomodoro-timer-card strong {
+  font-size: clamp(2.4rem, 4vw, 4rem);
+  line-height: 1;
+}
+
+.pomodoro-timer-card p {
+  margin: 0;
+  color: #d3e7ec;
+  font-size: 1.2rem;
+}
+
+.pomodoro-progress-head {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  color: #d7e6ff;
+  font-size: 1.04rem;
+}
+
+.pomodoro-progress-head strong {
+  font-size: 1.7rem;
+}
+
+.pomodoro-progress-track {
+  margin-top: 8px;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.pomodoro-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2a74ff, #35d2ff);
+  transition: width 0.35s ease;
+}
+
+.pomodoro-stats-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pomodoro-stat-card {
+  border-radius: 18px;
+  border: 1px solid rgba(114, 146, 207, 0.2);
+  background: rgba(9, 21, 47, 0.75);
+  padding: 14px 16px;
+}
+
+.pomodoro-stat-card span {
+  display: block;
+  color: rgba(165, 193, 236, 0.8);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.pomodoro-stat-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 2rem;
+}
+
+.pomodoro-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pomodoro-primary,
+.pomodoro-secondary {
+  min-height: 50px;
+  border-radius: 16px;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.pomodoro-primary {
+  background: linear-gradient(90deg, #2c6ef4, #1ca4ea);
+  color: #f4faff;
+}
+
+.pomodoro-secondary {
+  background: rgba(34, 48, 78, 0.95);
+  border: 1px solid rgba(133, 161, 215, 0.24);
+  color: #deebff;
+}
+
 .progress-header {
   margin-top: 22px;
   display: flex;
@@ -407,5 +612,19 @@ h1 {
   .task-card {
     grid-template-columns: auto 1fr auto;
     padding: 14px;
+  }
+
+  .pomodoro-head {
+    flex-direction: column;
+  }
+
+  .pomodoro-goal-row,
+  .pomodoro-stats-row,
+  .pomodoro-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .pomodoro-timer-card strong {
+    font-size: 3rem;
   }
 }

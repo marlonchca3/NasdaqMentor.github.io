@@ -185,6 +185,129 @@ const progressValue = computed(() => {
   return Math.round((completedCount.value / tasks.value.length) * 100)
 })
 
+// ── Pomodoro (local only, no Firestore) ─────────────────────────
+const focusMinutes = 25
+const shortBreakMinutes = 5
+const longBreakMinutes = 15
+
+const pomodoroGoalHours = ref(4)
+const pomodoroPhase = ref('focus')
+const pomodoroTimeLeft = ref(focusMinutes * 60)
+const pomodoroRunning = ref(false)
+const closedBlocks = ref(0)
+const focusAccumulatedSeconds = ref(0)
+let pomodoroInterval = null
+
+const phaseLabelMap = {
+  focus: 'Concentracion',
+  shortBreak: 'Descanso corto',
+  longBreak: 'Descanso largo',
+}
+
+function getPhaseSeconds(phase) {
+  if (phase === 'focus') return focusMinutes * 60
+  if (phase === 'shortBreak') return shortBreakMinutes * 60
+  return longBreakMinutes * 60
+}
+
+function formatClock(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+const phaseLabel = computed(() => phaseLabelMap[pomodoroPhase.value])
+const phaseBadgeText = computed(() => {
+  if (pomodoroPhase.value === 'focus') return `${focusMinutes}/${shortBreakMinutes}`
+  if (pomodoroPhase.value === 'shortBreak') return `Descanso corto ${shortBreakMinutes}m`
+  return `Descanso largo ${longBreakMinutes}m`
+})
+const clockText = computed(() => formatClock(pomodoroTimeLeft.value))
+const currentGoalLabel = computed(() => `${pomodoroGoalHours.value}h`)
+const focusedNowSeconds = computed(() => {
+  if (pomodoroPhase.value !== 'focus') {
+    return focusAccumulatedSeconds.value
+  }
+
+  const elapsedCurrent = getPhaseSeconds('focus') - pomodoroTimeLeft.value
+  return focusAccumulatedSeconds.value + Math.max(elapsedCurrent, 0)
+})
+const focusProgress = computed(() => {
+  const goalSeconds = pomodoroGoalHours.value * 3600
+  if (!goalSeconds) return 0
+  return Math.min(100, Math.round((focusedNowSeconds.value / goalSeconds) * 100))
+})
+const focusAccumulatedLabel = computed(() => {
+  const hours = Math.floor(focusedNowSeconds.value / 3600)
+  const minutes = Math.floor((focusedNowSeconds.value % 3600) / 60)
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+})
+const remainingFocusLabel = computed(() => {
+  const goalSeconds = pomodoroGoalHours.value * 3600
+  const remaining = Math.max(goalSeconds - focusedNowSeconds.value, 0)
+  const hours = Math.floor(remaining / 3600)
+  const minutes = Math.floor((remaining % 3600) / 60)
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
+})
+
+function moveToNextPhase({ countCompletedFocus }) {
+  if (pomodoroPhase.value === 'focus') {
+    if (countCompletedFocus) {
+      closedBlocks.value += 1
+      focusAccumulatedSeconds.value += getPhaseSeconds('focus')
+    }
+
+    if (closedBlocks.value > 0 && closedBlocks.value % 4 === 0) {
+      pomodoroPhase.value = 'longBreak'
+      pomodoroTimeLeft.value = getPhaseSeconds('longBreak')
+      return
+    }
+
+    pomodoroPhase.value = 'shortBreak'
+    pomodoroTimeLeft.value = getPhaseSeconds('shortBreak')
+    return
+  }
+
+  pomodoroPhase.value = 'focus'
+  pomodoroTimeLeft.value = getPhaseSeconds('focus')
+}
+
+function stopPomodoro() {
+  if (pomodoroInterval) {
+    clearInterval(pomodoroInterval)
+    pomodoroInterval = null
+  }
+  pomodoroRunning.value = false
+}
+
+function startPomodoro() {
+  if (pomodoroRunning.value) {
+    return
+  }
+
+  pomodoroRunning.value = true
+  pomodoroInterval = setInterval(() => {
+    if (pomodoroTimeLeft.value > 0) {
+      pomodoroTimeLeft.value -= 1
+      return
+    }
+
+    moveToNextPhase({ countCompletedFocus: true })
+  }, 1000)
+}
+
+function skipPhase() {
+  moveToNextPhase({ countCompletedFocus: false })
+}
+
+function resetPomodoro() {
+  stopPomodoro()
+  pomodoroPhase.value = 'focus'
+  pomodoroTimeLeft.value = getPhaseSeconds('focus')
+  closedBlocks.value = 0
+  focusAccumulatedSeconds.value = 0
+}
+
 const guestStorageKey = 'nasdaq-mentor-guest-checklist'
 
 function loadTasks() {
@@ -341,8 +464,18 @@ watch(tasks, () => {
   }
 }, { deep: true })
 
+watch(pomodoroGoalHours, (value) => {
+  if (!Number.isFinite(value)) {
+    pomodoroGoalHours.value = 4
+    return
+  }
+
+  pomodoroGoalHours.value = Math.min(24, Math.max(1, Math.round(value)))
+})
+
 onUnmounted(() => {
   stopClock()
+  stopPomodoro()
   stopTaskSubscription()
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel()
@@ -456,6 +589,75 @@ onMounted(() => {
       </div>
 
       <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
+
+      <section class="pomodoro-panel">
+        <div class="pomodoro-head">
+          <div>
+            <p class="pomodoro-eyebrow">Concentracion</p>
+            <h2>Pomodoro editable</h2>
+            <p class="pomodoro-copy">
+              Ajusta tu meta diaria de enfoque y trabaja en bloques pomodoro con descansos automaticos.
+            </p>
+          </div>
+          <div class="pomodoro-badges">
+            <span>{{ phaseBadgeText }}</span>
+          </div>
+        </div>
+
+        <div class="pomodoro-goal-row">
+          <label class="pomodoro-goal-card" for="daily-goal">
+            <span>Meta diaria (horas)</span>
+            <input
+              id="daily-goal"
+              v-model.number="pomodoroGoalHours"
+              type="number"
+              min="1"
+              max="24"
+            />
+          </label>
+          <div class="pomodoro-goal-card static">
+            <span>Meta actual</span>
+            <strong>{{ currentGoalLabel }}</strong>
+          </div>
+        </div>
+
+        <div class="pomodoro-timer-card">
+          <span class="phase-pill">{{ phaseLabel }}</span>
+          <strong>{{ clockText }}</strong>
+          <p>{{ pomodoroRunning ? 'En curso' : 'Listo para continuar' }}</p>
+        </div>
+
+        <div class="pomodoro-progress-head">
+          <span>Avance {{ currentGoalLabel }}</span>
+          <strong>{{ focusProgress }}%</strong>
+        </div>
+        <div class="pomodoro-progress-track">
+          <div class="pomodoro-progress-fill" :style="{ width: `${focusProgress}%` }"></div>
+        </div>
+
+        <div class="pomodoro-stats-row">
+          <article class="pomodoro-stat-card">
+            <span>Enfoque acumulado</span>
+            <strong>{{ focusAccumulatedLabel }}</strong>
+          </article>
+          <article class="pomodoro-stat-card">
+            <span>Tiempo restante</span>
+            <strong>{{ remainingFocusLabel }}</strong>
+          </article>
+          <article class="pomodoro-stat-card">
+            <span>Bloques cerrados</span>
+            <strong>{{ closedBlocks }}</strong>
+          </article>
+        </div>
+
+        <div class="pomodoro-actions">
+          <button class="pomodoro-primary" @click="startPomodoro">
+            {{ pomodoroRunning ? 'Corriendo' : 'Iniciar' }}
+          </button>
+          <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
+          <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
+        </div>
+      </section>
 
       <div class="progress-header">
         <span>Progreso</span>
