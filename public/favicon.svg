@@ -1,65 +1,100 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
   <defs>
+    <!-- Navy background gradient -->
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#071120"/>
-      <stop offset="100%" stop-color="#111c34"/>
+      <stop offset="0%" stop-color="#0d1b3e"/>
+      <stop offset="100%" stop-color="#0a1628"/>
     </linearGradient>
-    <linearGradient id="nGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2563eb"/>
-      <stop offset="60%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#10b981"/>
+
+    <!-- 3D N ribbon – left face (darker blue) -->
+    <linearGradient id="nLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a6ecf"/>
+      <stop offset="100%" stop-color="#0d4fa8"/>
     </linearGradient>
-    <linearGradient id="arrowGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#22d3ee"/>
-      <stop offset="100%" stop-color="#e0f2fe"/>
+
+    <!-- 3D N ribbon – right face (lighter cyan) -->
+    <linearGradient id="nRight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#29b6e8"/>
+      <stop offset="100%" stop-color="#55d4f5"/>
     </linearGradient>
-    <clipPath id="rounded">
-      <rect width="256" height="256" rx="52" ry="52"/>
-    </clipPath>
+
+    <!-- 3D N ribbon – top/highlight face -->
+    <linearGradient id="nTop" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3ec6f5"/>
+      <stop offset="100%" stop-color="#7ae0ff"/>
+    </linearGradient>
+
+    <!-- Cyan text gradient -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#29b6e8"/>
+      <stop offset="100%" stop-color="#55d4f5"/>
+    </linearGradient>
   </defs>
 
-  <!-- Background -->
-  <rect width="256" height="256" rx="52" ry="52" fill="url(#bgGrad)"/>
+  <!-- Background rounded square -->
+  <rect width="256" height="256" rx="50" ry="50" fill="url(#bgGrad)"/>
 
-  <!-- Subtle grid lines -->
-  <g clip-path="url(#rounded)" opacity="0.08" stroke="#4fa3d4" stroke-width="1">
-    <line x1="0" y1="64" x2="256" y2="64"/>
-    <line x1="0" y1="128" x2="256" y2="128"/>
-    <line x1="0" y1="192" x2="256" y2="192"/>
-    <line x1="64" y1="0" x2="64" y2="256"/>
-    <line x1="128" y1="0" x2="128" y2="256"/>
-    <line x1="192" y1="0" x2="192" y2="256"/>
-  </g>
+  <!-- ═══ 3-D ribbon "N" ═══
+       Built from parallelogram panels to simulate a folded ribbon.
+       Left vertical bar, diagonal stroke, right vertical bar. -->
 
-  <!-- Candlesticks (background decoration) -->
-  <g clip-path="url(#rounded)" opacity="0.22">
-    <!-- candle 1 -->
-    <rect x="38" y="140" width="8" height="52" rx="2" fill="#10b981"/>
-    <line x1="42" y1="130" x2="42" y2="145" stroke="#10b981" stroke-width="2"/>
-    <line x1="42" y1="192" x2="42" y2="200" stroke="#10b981" stroke-width="2"/>
-    <!-- candle 2 -->
-    <rect x="58" y="120" width="8" height="40" rx="2" fill="#ef4444"/>
-    <line x1="62" y1="110" x2="62" y2="122" stroke="#ef4444" stroke-width="2"/>
-    <line x1="62" y1="160" x2="62" y2="170" stroke="#ef4444" stroke-width="2"/>
-    <!-- candle 3 -->
-    <rect x="190" y="108" width="8" height="48" rx="2" fill="#10b981"/>
-    <line x1="194" y1="98" x2="194" y2="110" stroke="#10b981" stroke-width="2"/>
-    <line x1="194" y1="156" x2="194" y2="165" stroke="#10b981" stroke-width="2"/>
-    <!-- candle 4 -->
-    <rect x="210" y="88" width="8" height="56" rx="2" fill="#10b981"/>
-    <line x1="214" y1="78" x2="214" y2="90" stroke="#10b981" stroke-width="2"/>
-    <line x1="214" y1="144" x2="214" y2="154" stroke="#10b981" stroke-width="2"/>
-  </g>
+  <!-- Left bar – front face -->
+  <polygon points="52,35 74,35 74,148 52,148" fill="url(#nLeft)"/>
+  <!-- Left bar – top bevel -->
+  <polygon points="52,35 74,35 82,27 60,27" fill="url(#nTop)"/>
+  <!-- Left bar – right bevel -->
+  <polygon points="74,35 82,27 82,140 74,148" fill="url(#nRight)"/>
 
-  <!-- The "N" letter -->
-  <path d="M 72 185 L 72 75 L 100 75 L 155 150 L 155 75 L 183 75 L 183 185 L 155 185 L 100 110 L 100 185 Z"
-        fill="url(#nGrad)"/>
+  <!-- Diagonal stroke – front face -->
+  <polygon points="74,35 98,35 158,148 134,148" fill="url(#nLeft)"/>
+  <!-- Diagonal – top bevel -->
+  <polygon points="74,35 98,35 106,27 82,27" fill="url(#nTop)"/>
+  <!-- Diagonal – right bevel (thin highlight) -->
+  <polygon points="98,35 106,27 166,140 158,148" fill="url(#nRight)"/>
 
-  <!-- Arrow shaft + head overlaying top-right of N -->
-  <g>
-    <!-- shaft -->
-    <line x1="148" y1="130" x2="200" y2="55" stroke="url(#arrowGrad)" stroke-width="10" stroke-linecap="round"/>
-    <!-- arrowhead -->
-    <polygon points="200,55 175,58 193,76" fill="white" opacity="0.92"/>
-  </g>
+  <!-- Right bar – front face -->
+  <polygon points="134,35 156,35 156,148 134,148" fill="url(#nLeft)"/>
+  <!-- Right bar – top bevel -->
+  <polygon points="134,35 156,35 164,27 142,27" fill="url(#nTop)"/>
+  <!-- Right bar – right bevel -->
+  <polygon points="156,35 164,27 164,140 156,148" fill="url(#nRight)"/>
+
+  <!-- ═══ "NASDAQ" text ═══ -->
+  <text
+    x="128" y="185"
+    font-family="Arial Black, Arial, sans-serif"
+    font-weight="900"
+    font-size="38"
+    fill="white"
+    text-anchor="middle"
+    letter-spacing="1">NASDAQ</text>
+
+  <!-- ═══ "MENTOR APP" text ═══ -->
+  <text
+    x="108" y="208"
+    font-family="Arial, sans-serif"
+    font-weight="700"
+    font-size="16"
+    fill="url(#cyanGrad)"
+    text-anchor="middle"
+    letter-spacing="2">MENTOR APP</text>
+
+  <!-- ═══ "CHECKLIST" text ═══ -->
+  <text
+    x="104" y="228"
+    font-family="Arial, sans-serif"
+    font-weight="700"
+    font-size="15"
+    fill="white"
+    text-anchor="middle"
+    letter-spacing="2">CHECKLIST</text>
+
+  <!-- ═══ Checkbox icon ═══ -->
+  <!-- Box -->
+  <rect x="190" y="213" width="22" height="22" rx="4" ry="4"
+        fill="none" stroke="url(#cyanGrad)" stroke-width="2.5"/>
+  <!-- Checkmark -->
+  <polyline points="194,224 198,229 208,218"
+            fill="none" stroke="#29b6e8" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
