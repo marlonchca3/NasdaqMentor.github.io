@@ -291,6 +291,35 @@ h1 {
   line-height: 1;
 }
 
+.drag-handle {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  color: rgba(141, 171, 223, 0.35);
+  cursor: grab;
+  padding: 0 4px;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.task-card:hover .drag-handle {
+  color: rgba(141, 171, 223, 0.7);
+}
+
+.task-card.dragging {
+  opacity: 0.4;
+  scale: 0.97;
+}
+
+.task-card.drag-over {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(44, 197, 232, 0.35);
+  transform: translateY(-2px);
+}
+
 .empty-state {
   margin-top: 24px;
   padding: 22px;

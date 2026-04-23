@@ -7,10 +7,9 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { auth, db, loginWithGoogle, logout } from './firebase'
 
@@ -22,6 +21,52 @@ const authError = ref('')
 const taskInput = ref('')
 const tasks = ref([])
 let unsubscribeTasks = null
+
+// ── Drag & Drop ──────────────────────────────────────────────────
+const dragFromIndex = ref(null)
+const dragOverIndex = ref(null)
+
+function onDragStart(index) {
+  dragFromIndex.value = index
+}
+
+function onDragEnter(index) {
+  if (dragFromIndex.value !== null) {
+    dragOverIndex.value = index
+  }
+}
+
+function onDragEnd() {
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+}
+
+async function onDrop(toIndex) {
+  const fromIndex = dragFromIndex.value
+  dragFromIndex.value = null
+  dragOverIndex.value = null
+
+  if (fromIndex === null || fromIndex === toIndex) {
+    return
+  }
+
+  const newTasks = [...tasks.value]
+  const [moved] = newTasks.splice(fromIndex, 1)
+  newTasks.splice(toIndex, 0, moved)
+  tasks.value = newTasks
+
+  if (user.value) {
+    await saveOrder()
+  }
+}
+
+async function saveOrder() {
+  const batch = writeBatch(db)
+  tasks.value.forEach((task, index) => {
+    batch.update(doc(db, 'users', user.value.uid, 'tasks', task.id), { order: index })
+  })
+  await batch.commit()
+}
 
 // ── TTS ──────────────────────────────────────────────────────────
 const ttsEnabled = ref(true)
@@ -133,14 +178,25 @@ function stopTaskSubscription() {
 function subscribeToTasks(userId) {
   stopTaskSubscription()
 
-  const tasksQuery = query(collection(db, 'users', userId, 'tasks'), orderBy('createdAt', 'desc'))
-
-  unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
-    tasks.value = snapshot.docs.map((taskDoc) => ({
+  unsubscribeTasks = onSnapshot(collection(db, 'users', userId, 'tasks'), (snapshot) => {
+    const docs = snapshot.docs.map((taskDoc) => ({
       id: taskDoc.id,
       title: taskDoc.data().title ?? '',
       completed: Boolean(taskDoc.data().completed),
+      order: taskDoc.data().order ?? null,
+      createdAt: taskDoc.data().createdAt,
     }))
+
+    docs.sort((a, b) => {
+      if (a.order !== null && b.order !== null) return a.order - b.order
+      if (a.order !== null) return -1
+      if (b.order !== null) return 1
+      const ta = a.createdAt?.toMillis() ?? 0
+      const tb = b.createdAt?.toMillis() ?? 0
+      return tb - ta
+    })
+
+    tasks.value = docs
   })
 }
 
@@ -152,12 +208,19 @@ async function addTask() {
   }
 
   if (user.value) {
-    await addDoc(collection(db, 'users', user.value.uid, 'tasks'), {
+    const batch = writeBatch(db)
+    const newRef = doc(collection(db, 'users', user.value.uid, 'tasks'))
+    batch.set(newRef, {
       title,
       completed: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      order: 0,
     })
+    tasks.value.forEach((task, index) => {
+      batch.update(doc(db, 'users', user.value.uid, 'tasks', task.id), { order: index + 1 })
+    })
+    await batch.commit()
   } else {
     tasks.value.unshift({
       id: crypto.randomUUID(),
@@ -359,11 +422,22 @@ onMounted(() => {
 
       <div v-if="tasks.length" class="task-list">
         <article
-          v-for="task in tasks"
+          v-for="(task, index) in tasks"
           :key="task.id"
           class="task-card"
-          :class="{ complete: task.completed }"
+          :class="{
+            complete: task.completed,
+            dragging: dragFromIndex === index,
+            'drag-over': dragOverIndex === index && dragFromIndex !== index,
+          }"
+          draggable="true"
+          @dragstart="onDragStart(index)"
+          @dragenter.prevent="onDragEnter(index)"
+          @dragover.prevent
+          @drop.prevent="onDrop(index)"
+          @dragend="onDragEnd"
         >
+          <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
           <button class="toggle-button" :aria-pressed="task.completed" @click="toggleTask(task.id)">
             <span class="toggle-indicator"></span>
           </button>
