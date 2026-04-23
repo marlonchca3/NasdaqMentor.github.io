@@ -71,7 +71,17 @@ async function saveOrder() {
 // ── TTS ──────────────────────────────────────────────────────────
 const ttsEnabled = ref(true)
 const ttsSpeaking = ref(false)
+const ttsReady = ref(false)
 let clockInterval = null
+
+function getSpanishVoice() {
+  const voices = window.speechSynthesis.getVoices()
+  return (
+    voices.find((v) => v.lang === 'es-ES') ||
+    voices.find((v) => v.lang.startsWith('es')) ||
+    null
+  )
+}
 
 function speak(text) {
   if (!('speechSynthesis' in window)) {
@@ -79,13 +89,24 @@ function speak(text) {
   }
 
   window.speechSynthesis.cancel()
+
   const utterance = new SpeechSynthesisUtterance(text)
+
+  const voice = getSpanishVoice()
+  if (voice) {
+    utterance.voice = voice
+  }
+
   utterance.lang = 'es-ES'
   utterance.rate = 0.95
   utterance.onstart = () => { ttsSpeaking.value = true }
   utterance.onend = () => { ttsSpeaking.value = false }
   utterance.onerror = () => { ttsSpeaking.value = false }
-  window.speechSynthesis.speak(utterance)
+
+  // Chrome bug: cancel() + speak() in same tick can silently fail
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance)
+  }, 50)
 }
 
 function buildSpeechText() {
@@ -115,11 +136,13 @@ function startClock() {
       return
     }
 
-    const now = new Date()
-    const minutes = now.getMinutes()
-    const seconds = now.getSeconds()
+    // Chrome pauses speechSynthesis in background tabs — keep it alive
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume()
+    }
 
-    if (seconds === 0 && minutes % 5 === 0) {
+    const now = new Date()
+    if (now.getSeconds() === 0 && now.getMinutes() % 5 === 0) {
       speak(buildSpeechText())
     }
   }, 1000)
@@ -134,6 +157,22 @@ function stopClock() {
 
 function speakNow() {
   speak(buildSpeechText())
+}
+
+function initTts() {
+  if (!('speechSynthesis' in window)) {
+    return
+  }
+
+  const tryInit = () => {
+    const voices = window.speechSynthesis.getVoices()
+    if (voices.length > 0) {
+      ttsReady.value = true
+    }
+  }
+
+  tryInit()
+  window.speechSynthesis.onvoiceschanged = tryInit
 }
 
 const completedCount = computed(() => tasks.value.filter((task) => task.completed).length)
@@ -311,6 +350,7 @@ onUnmounted(() => {
 })
 
 onMounted(() => {
+  initTts()
   startClock()
 
   onAuthStateChanged(auth, (firebaseUser) => {
@@ -351,8 +391,13 @@ onMounted(() => {
               <span v-else class="tts-icon">🔕</span>
               {{ ttsEnabled ? 'Voz activada' : 'Voz desactivada' }}
             </button>
-            <button class="tts-preview" :disabled="!tasks.length" @click="speakNow">
-              Probar ahora
+            <button
+              class="tts-preview"
+              :disabled="!tasks.length || !ttsReady"
+              :title="!ttsReady ? 'Cargando voces...' : 'Hablar ahora'"
+              @click="speakNow"
+            >
+              {{ ttsReady ? 'Probar ahora' : 'Cargando...' }}
             </button>
           </div>
         </div>
