@@ -194,9 +194,12 @@ const pomodoroGoalHours = ref(4)
 const pomodoroPhase = ref('focus')
 const pomodoroTimeLeft = ref(focusMinutes * 60)
 const pomodoroRunning = ref(false)
+const pomodoroSyncing = ref(false)
+const pomodoroSyncLabel = ref('')
 const closedBlocks = ref(0)
 const focusAccumulatedSeconds = ref(0)
 let pomodoroInterval = null
+let pomodoroSyncTimeout = null
 
 const phaseLabelMap = {
   focus: 'Concentracion',
@@ -260,16 +263,90 @@ function moveToNextPhase({ countCompletedFocus }) {
     if (closedBlocks.value > 0 && closedBlocks.value % 4 === 0) {
       pomodoroPhase.value = 'longBreak'
       pomodoroTimeLeft.value = getPhaseSeconds('longBreak')
-      return
+      return false
     }
 
     pomodoroPhase.value = 'shortBreak'
     pomodoroTimeLeft.value = getPhaseSeconds('shortBreak')
-    return
+    return false
   }
 
   pomodoroPhase.value = 'focus'
   pomodoroTimeLeft.value = getPhaseSeconds('focus')
+  return true
+}
+
+function getNextFocusSync() {
+  const now = new Date()
+  const target = new Date(now)
+
+  target.setMilliseconds(0)
+  target.setSeconds(0)
+
+  const minutesMod = target.getMinutes() % 5
+  const minutesToAdd = (5 - minutesMod) % 5
+  const isAlreadySynced = now.getSeconds() === 0 && now.getMilliseconds() === 0 && minutesMod === 0
+
+  if (!isAlreadySynced) {
+    target.setMinutes(target.getMinutes() + (minutesToAdd === 0 ? 5 : minutesToAdd))
+  }
+
+  return {
+    delayMs: Math.max(target.getTime() - now.getTime(), 0),
+    label: `${String(target.getHours()).padStart(2, '0')}:${String(target.getMinutes()).padStart(2, '0')}:00`,
+  }
+}
+
+function clearPomodoroSync() {
+  if (pomodoroSyncTimeout) {
+    clearTimeout(pomodoroSyncTimeout)
+    pomodoroSyncTimeout = null
+  }
+
+  pomodoroSyncing.value = false
+  pomodoroSyncLabel.value = ''
+}
+
+function startPomodoroInterval() {
+  if (pomodoroInterval) {
+    clearInterval(pomodoroInterval)
+  }
+
+  pomodoroInterval = setInterval(() => {
+    if (pomodoroTimeLeft.value > 0) {
+      pomodoroTimeLeft.value -= 1
+      return
+    }
+
+    const movedToFocus = moveToNextPhase({ countCompletedFocus: true })
+    if (movedToFocus) {
+      alignFocusStart()
+    }
+  }, 1000)
+}
+
+function alignFocusStart() {
+  clearPomodoroSync()
+  const { delayMs, label } = getNextFocusSync()
+
+  if (delayMs === 0) {
+    startPomodoroInterval()
+    return
+  }
+
+  pomodoroSyncing.value = true
+  pomodoroSyncLabel.value = label
+
+  if (pomodoroInterval) {
+    clearInterval(pomodoroInterval)
+    pomodoroInterval = null
+  }
+
+  pomodoroSyncTimeout = setTimeout(() => {
+    pomodoroSyncing.value = false
+    pomodoroSyncLabel.value = ''
+    startPomodoroInterval()
+  }, delayMs)
 }
 
 function stopPomodoro() {
@@ -277,6 +354,7 @@ function stopPomodoro() {
     clearInterval(pomodoroInterval)
     pomodoroInterval = null
   }
+  clearPomodoroSync()
   pomodoroRunning.value = false
 }
 
@@ -286,18 +364,29 @@ function startPomodoro() {
   }
 
   pomodoroRunning.value = true
-  pomodoroInterval = setInterval(() => {
-    if (pomodoroTimeLeft.value > 0) {
-      pomodoroTimeLeft.value -= 1
-      return
-    }
 
-    moveToNextPhase({ countCompletedFocus: true })
-  }, 1000)
+  if (pomodoroPhase.value === 'focus') {
+    alignFocusStart()
+    return
+  }
+
+  startPomodoroInterval()
 }
 
 function skipPhase() {
-  moveToNextPhase({ countCompletedFocus: false })
+  const movedToFocus = moveToNextPhase({ countCompletedFocus: false })
+
+  if (!pomodoroRunning.value) {
+    return
+  }
+
+  if (movedToFocus) {
+    alignFocusStart()
+    return
+  }
+
+  clearPomodoroSync()
+  startPomodoroInterval()
 }
 
 function resetPomodoro() {
@@ -624,7 +713,9 @@ onMounted(() => {
         <div class="pomodoro-timer-card">
           <span class="phase-pill">{{ phaseLabel }}</span>
           <strong>{{ clockText }}</strong>
-          <p>{{ pomodoroRunning ? 'En curso' : 'Listo para continuar' }}</p>
+          <p>
+            {{ pomodoroSyncing ? `Esperando inicio ${pomodoroSyncLabel}` : (pomodoroRunning ? 'En curso' : 'Listo para continuar') }}
+          </p>
         </div>
 
         <div class="pomodoro-progress-head">
