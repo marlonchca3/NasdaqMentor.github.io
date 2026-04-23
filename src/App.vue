@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onAuthStateChanged } from 'firebase/auth'
 import {
   addDoc,
@@ -22,6 +22,74 @@ const authError = ref('')
 const taskInput = ref('')
 const tasks = ref([])
 let unsubscribeTasks = null
+
+// ── TTS ──────────────────────────────────────────────────────────
+const ttsEnabled = ref(true)
+const ttsSpeaking = ref(false)
+let clockInterval = null
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) {
+    return
+  }
+
+  window.speechSynthesis.cancel()
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = 'es-ES'
+  utterance.rate = 0.95
+  utterance.onstart = () => { ttsSpeaking.value = true }
+  utterance.onend = () => { ttsSpeaking.value = false }
+  utterance.onerror = () => { ttsSpeaking.value = false }
+  window.speechSynthesis.speak(utterance)
+}
+
+function buildSpeechText() {
+  const completed = tasks.value.filter((task) => task.completed)
+  const pending = tasks.value.filter((task) => !task.completed)
+
+  const parts = []
+
+  if (completed.length) {
+    parts.push(`Tareas completadas: ${completed.map((t) => t.title).join('. ')}.`)
+  }
+
+  if (pending.length) {
+    parts.push(`Tareas pendientes: ${pending.map((t) => t.title).join('. ')}.`)
+  }
+
+  if (!parts.length) {
+    return 'No hay tareas registradas para hoy.'
+  }
+
+  return parts.join(' ')
+}
+
+function startClock() {
+  clockInterval = setInterval(() => {
+    if (!ttsEnabled.value) {
+      return
+    }
+
+    const now = new Date()
+    const minutes = now.getMinutes()
+    const seconds = now.getSeconds()
+
+    if (seconds === 0 && minutes % 5 === 0) {
+      speak(buildSpeechText())
+    }
+  }, 1000)
+}
+
+function stopClock() {
+  if (clockInterval) {
+    clearInterval(clockInterval)
+    clockInterval = null
+  }
+}
+
+function speakNow() {
+  speak(buildSpeechText())
+}
 
 const completedCount = computed(() => tasks.value.filter((task) => task.completed).length)
 const pendingCount = computed(() => tasks.value.length - completedCount.value)
@@ -171,7 +239,17 @@ watch(tasks, () => {
   }
 }, { deep: true })
 
+onUnmounted(() => {
+  stopClock()
+  stopTaskSubscription()
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel()
+  }
+})
+
 onMounted(() => {
+  startClock()
+
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
     user.value = firebaseUser
@@ -197,6 +275,23 @@ onMounted(() => {
           <p class="subcopy">
             Organiza tu enfoque diario y marca tu progreso con una cuenta de Google.
           </p>
+
+          <div class="tts-row">
+            <button
+              class="tts-toggle"
+              :class="{ active: ttsEnabled }"
+              :title="ttsEnabled ? 'Desactivar voz' : 'Activar voz'"
+              @click="ttsEnabled = !ttsEnabled"
+            >
+              <span v-if="ttsSpeaking" class="tts-icon">🔊</span>
+              <span v-else-if="ttsEnabled" class="tts-icon">🔔</span>
+              <span v-else class="tts-icon">🔕</span>
+              {{ ttsEnabled ? 'Voz activada' : 'Voz desactivada' }}
+            </button>
+            <button class="tts-preview" :disabled="!tasks.length" @click="speakNow">
+              Probar ahora
+            </button>
+          </div>
         </div>
 
         <div v-if="authReady" class="auth-panel">

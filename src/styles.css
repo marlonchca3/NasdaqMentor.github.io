@@ -301,6 +301,59 @@ h1 {
   text-align: center;
 }
 
+.tts-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.tts-toggle,
+.tts-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.2s ease;
+}
+
+.tts-toggle {
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tts-toggle.active {
+  color: var(--accent-green);
+  background: rgba(28, 199, 103, 0.1);
+  border-color: rgba(28, 199, 103, 0.3);
+}
+
+.tts-preview {
+  color: var(--text-main);
+  background: rgba(52, 132, 255, 0.14);
+  border: 1px solid rgba(52, 132, 255, 0.28);
+}
+
+.tts-toggle:hover,
+.tts-preview:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.tts-preview:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tts-icon {
+  font-size: 1rem;
+}
+
 @media (max-width: 720px) {
   .app-card {
     padding: 22px;
