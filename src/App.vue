@@ -506,20 +506,40 @@ function subscribeToEval(userId) {
 }
 
 async function saveEvalSettings() {
-  if (user.value) {
-    await setDoc(
-      doc(db, 'users', user.value.uid, 'eval', 'settings'),
-      { oneR: evalOneR.value, objetivo: evalObjetivo.value },
-      { merge: true },
-    )
-    return
+  try {
+    if (user.value) {
+      await setDoc(
+        doc(db, 'users', user.value.uid, 'eval', 'settings'),
+        { oneR: evalOneR.value, objetivo: evalObjetivo.value },
+        { merge: true },
+      )
+      return
+    }
+    persistEval()
+  } catch (error) {
+    authError.value = 'No se pudo sincronizar Meta de evaluacion.'
+    console.error(error)
   }
-  persistEval()
 }
 
 function scheduleEvalSettingsSave() {
   if (evalSaveTimer) clearTimeout(evalSaveTimer)
-  evalSaveTimer = setTimeout(saveEvalSettings, 800)
+  evalSaveTimer = setTimeout(() => {
+    saveEvalSettings()
+  }, 800)
+}
+
+function flushEvalSettingsSave() {
+  if (evalSaveTimer) {
+    clearTimeout(evalSaveTimer)
+    evalSaveTimer = null
+  }
+
+  saveEvalSettings()
+}
+
+function handlePageHide() {
+  flushEvalSettingsSave()
 }
 
 async function addTrade() {
@@ -720,11 +740,11 @@ watch([evalOneR, evalObjetivo], () => {
 })
 
 onUnmounted(() => {
-  if (evalSaveTimer) {
-    clearTimeout(evalSaveTimer)
-    evalSaveTimer = null
-    saveEvalSettings()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pagehide', handlePageHide)
   }
+
+  flushEvalSettingsSave()
   stopClock()
   stopPomodoro()
   stopTaskSubscription()
@@ -735,6 +755,10 @@ onUnmounted(() => {
 })
 
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', handlePageHide)
+  }
+
   initTts()
   startClock()
 
@@ -858,7 +882,7 @@ onMounted(() => {
               class="eval-input"
               type="text"
               inputmode="decimal"
-              @input="evalOneR = Math.max(0.01, parseFloat(String($event.target.value).replace(',', '.')) || evalOneR)"
+              @input="evalOneR = Math.max(0.01, parseFloat(String($event.target.value).replace(',', '.')) || evalOneR); scheduleEvalSettingsSave()"
               @blur="saveEvalSettings"
             />
           </div>
@@ -870,7 +894,7 @@ onMounted(() => {
               class="eval-input"
               type="text"
               inputmode="decimal"
-              @input="evalObjetivo = Math.max(1, parseFloat(String($event.target.value).replace(',', '.')) || evalObjetivo)"
+              @input="evalObjetivo = Math.max(1, parseFloat(String($event.target.value).replace(',', '.')) || evalObjetivo); scheduleEvalSettingsSave()"
               @blur="saveEvalSettings"
             />
           </div>
