@@ -280,15 +280,44 @@ h1 {
   letter-spacing: 0.08em;
 }
 
-.pomodoro-goal-card input {
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid rgba(91, 136, 209, 0.3);
-  background: rgba(1, 8, 24, 0.9);
+.goal-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(91, 136, 209, 0.35);
+  background: rgba(1, 8, 24, 0.85);
   color: #edf4ff;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.stepper-btn:not(:disabled):active {
+  background: rgba(52, 132, 255, 0.25);
+}
+
+.stepper-value {
   font-size: 1.55rem;
   font-weight: 700;
-  padding: 12px 14px;
+  min-width: 44px;
+  text-align: center;
 }
 
 .pomodoro-goal-card.static strong {

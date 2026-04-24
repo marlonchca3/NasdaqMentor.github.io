@@ -694,16 +694,22 @@ onMounted(() => {
         </div>
 
         <div class="pomodoro-goal-row">
-          <label class="pomodoro-goal-card" for="daily-goal">
+          <div class="pomodoro-goal-card">
             <span>Meta diaria (horas)</span>
-            <input
-              id="daily-goal"
-              v-model.number="pomodoroGoalHours"
-              type="number"
-              min="1"
-              max="24"
-            />
-          </label>
+            <div class="goal-stepper">
+              <button
+                class="stepper-btn"
+                :disabled="pomodoroGoalHours <= 1"
+                @click="pomodoroGoalHours = Math.max(1, pomodoroGoalHours - 1)"
+              >−</button>
+              <strong class="stepper-value">{{ pomodoroGoalHours }}h</strong>
+              <button
+                class="stepper-btn"
+                :disabled="pomodoroGoalHours >= 24"
+                @click="pomodoroGoalHours = Math.min(24, pomodoroGoalHours + 1)"
+              >+</button>
+            </div>
+          </div>
           <div class="pomodoro-goal-card static">
             <span>Meta actual</span>
             <strong>{{ currentGoalLabel }}</strong>
