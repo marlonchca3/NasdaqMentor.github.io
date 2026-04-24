@@ -517,6 +517,11 @@ async function saveEvalSettings() {
   persistEval()
 }
 
+function scheduleEvalSettingsSave() {
+  if (evalSaveTimer) clearTimeout(evalSaveTimer)
+  evalSaveTimer = setTimeout(saveEvalSettings, 800)
+}
+
 async function addTrade() {
   const rVal = parseFloat(tradeInput.value)
   if (!Number.isFinite(rVal) || rVal === 0) return
@@ -711,11 +716,15 @@ watch(pomodoroGoalHours, (value) => {
 })
 
 watch([evalOneR, evalObjetivo], () => {
-  if (evalSaveTimer) clearTimeout(evalSaveTimer)
-  evalSaveTimer = setTimeout(saveEvalSettings, 800)
+  scheduleEvalSettingsSave()
 })
 
 onUnmounted(() => {
+  if (evalSaveTimer) {
+    clearTimeout(evalSaveTimer)
+    evalSaveTimer = null
+    saveEvalSettings()
+  }
   stopClock()
   stopPomodoro()
   stopTaskSubscription()
@@ -849,7 +858,8 @@ onMounted(() => {
               class="eval-input"
               type="text"
               inputmode="decimal"
-              @change="evalOneR = Math.max(0.01, parseFloat($event.target.value) || evalOneR)"
+              @input="evalOneR = Math.max(0.01, parseFloat(String($event.target.value).replace(',', '.')) || evalOneR)"
+              @blur="saveEvalSettings"
             />
           </div>
           <div class="eval-input-card">
@@ -860,7 +870,8 @@ onMounted(() => {
               class="eval-input"
               type="text"
               inputmode="decimal"
-              @change="evalObjetivo = Math.max(1, parseFloat($event.target.value) || evalObjetivo)"
+              @input="evalObjetivo = Math.max(1, parseFloat(String($event.target.value).replace(',', '.')) || evalObjetivo)"
+              @blur="saveEvalSettings"
             />
           </div>
         </div>
