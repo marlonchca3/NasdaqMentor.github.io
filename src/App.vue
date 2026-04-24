@@ -8,6 +8,7 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
+  setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
@@ -399,6 +400,153 @@ function resetPomodoro() {
 
 const guestStorageKey = 'nasdaq-mentor-guest-checklist'
 
+// ── Evaluacion ───────────────────────────────────────────────────
+const evalOneR = ref(5)
+const evalObjetivo = ref(58000)
+const tradesList = ref([])
+const tradeInput = ref('')
+let unsubscribeEval = null
+let unsubscribeEvalTrades = null
+let evalSaveTimer = null
+
+const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
+const evalTotalUSD = computed(() => evalTotalR.value * evalOneR.value)
+const evalRestanR = computed(() => {
+  if (!evalOneR.value) return 0
+  return (evalObjetivo.value / evalOneR.value) - evalTotalR.value
+})
+const evalRestanUSD = computed(() => evalObjetivo.value - evalTotalUSD.value)
+const evalProgress = computed(() => {
+  if (!evalObjetivo.value) return 0
+  return Math.min(100, Math.round((evalTotalUSD.value / evalObjetivo.value) * 100))
+})
+const evalTradesToday = computed(() => {
+  const todayStr = new Date().toDateString()
+  return tradesList.value.filter((t) => {
+    const d = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt)
+    return d.toDateString() === todayStr
+  })
+})
+const evalTradesHoy = computed(() => evalTradesToday.value.length)
+const evalRHoy = computed(() => evalTradesToday.value.reduce((sum, t) => sum + t.r, 0))
+const evalWinRate = computed(() => {
+  if (!tradesList.value.length) return 0
+  return Math.round((tradesList.value.filter((t) => t.r > 0).length / tradesList.value.length) * 100)
+})
+
+const guestEvalKey = 'nasdaq-mentor-guest-eval'
+const guestEvalTradesKey = 'nasdaq-mentor-guest-trades'
+
+function loadEval() {
+  try {
+    const raw = localStorage.getItem(guestEvalKey)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      evalOneR.value = typeof parsed.oneR === 'number' ? parsed.oneR : 5
+      evalObjetivo.value = typeof parsed.objetivo === 'number' ? parsed.objetivo : 58000
+    }
+    const rawTrades = localStorage.getItem(guestEvalTradesKey)
+    if (rawTrades) {
+      const parsed = JSON.parse(rawTrades)
+      tradesList.value = Array.isArray(parsed)
+        ? parsed.map((t) => ({ ...t, createdAt: new Date(t.createdAt) }))
+        : []
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function persistEval() {
+  localStorage.setItem(guestEvalKey, JSON.stringify({ oneR: evalOneR.value, objetivo: evalObjetivo.value }))
+}
+
+function persistEvalTrades() {
+  localStorage.setItem(
+    guestEvalTradesKey,
+    JSON.stringify(
+      tradesList.value.map((t) => ({
+        ...t,
+        createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
+      })),
+    ),
+  )
+}
+
+function stopEvalSubscription() {
+  if (unsubscribeEval) {
+    unsubscribeEval()
+    unsubscribeEval = null
+  }
+  if (unsubscribeEvalTrades) {
+    unsubscribeEvalTrades()
+    unsubscribeEvalTrades = null
+  }
+}
+
+function subscribeToEval(userId) {
+  stopEvalSubscription()
+
+  unsubscribeEval = onSnapshot(doc(db, 'users', userId, 'eval', 'settings'), (snap) => {
+    if (snap.exists()) {
+      evalOneR.value = snap.data().oneR ?? 5
+      evalObjetivo.value = snap.data().objetivo ?? 58000
+    }
+  })
+
+  unsubscribeEvalTrades = onSnapshot(collection(db, 'users', userId, 'trades'), (snap) => {
+    tradesList.value = snap.docs
+      .map((d) => ({
+        id: d.id,
+        r: d.data().r ?? 0,
+        createdAt: d.data().createdAt?.toDate() ?? new Date(),
+      }))
+      .sort((a, b) => b.createdAt - a.createdAt)
+  })
+}
+
+async function saveEvalSettings() {
+  if (user.value) {
+    await setDoc(
+      doc(db, 'users', user.value.uid, 'eval', 'settings'),
+      { oneR: evalOneR.value, objetivo: evalObjetivo.value },
+      { merge: true },
+    )
+    return
+  }
+  persistEval()
+}
+
+async function addTrade() {
+  const rVal = parseFloat(tradeInput.value)
+  if (!Number.isFinite(rVal) || rVal === 0) return
+
+  if (user.value) {
+    await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
+      r: rVal,
+      createdAt: serverTimestamp(),
+    })
+  } else {
+    tradesList.value.unshift({
+      id: crypto.randomUUID(),
+      r: rVal,
+      createdAt: new Date(),
+    })
+    persistEvalTrades()
+  }
+
+  tradeInput.value = ''
+}
+
+async function removeTrade(tradeId) {
+  if (user.value) {
+    await deleteDoc(doc(db, 'users', user.value.uid, 'trades', tradeId))
+    return
+  }
+  tradesList.value = tradesList.value.filter((t) => t.id !== tradeId)
+  persistEvalTrades()
+}
+
 function loadTasks() {
   const rawTasks = localStorage.getItem(guestStorageKey)
 
@@ -562,10 +710,16 @@ watch(pomodoroGoalHours, (value) => {
   pomodoroGoalHours.value = Math.min(24, Math.max(1, Math.round(value)))
 })
 
+watch([evalOneR, evalObjetivo], () => {
+  if (evalSaveTimer) clearTimeout(evalSaveTimer)
+  evalSaveTimer = setTimeout(saveEvalSettings, 800)
+})
+
 onUnmounted(() => {
   stopClock()
   stopPomodoro()
   stopTaskSubscription()
+  stopEvalSubscription()
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }
@@ -577,15 +731,18 @@ onMounted(() => {
 
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
+    stopEvalSubscription()
     user.value = firebaseUser
     authReady.value = true
 
     if (firebaseUser) {
       subscribeToTasks(firebaseUser.uid)
+      subscribeToEval(firebaseUser.uid)
       return
     }
 
     loadTasks()
+    loadEval()
   })
 })
 </script>
@@ -678,6 +835,107 @@ onMounted(() => {
       </div>
 
       <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
+
+      <section class="eval-panel">
+        <p class="eval-eyebrow">Objetivo</p>
+        <h2 class="eval-title">Meta de evaluacion</h2>
+
+        <div class="eval-inputs-row">
+          <div class="eval-input-card">
+            <label for="eval-one-r">1R ($)</label>
+            <input
+              id="eval-one-r"
+              :value="evalOneR"
+              class="eval-input"
+              type="text"
+              inputmode="decimal"
+              @change="evalOneR = Math.max(0.01, parseFloat($event.target.value) || evalOneR)"
+            />
+          </div>
+          <div class="eval-input-card">
+            <label for="eval-objetivo">OBJETIVO ($)</label>
+            <input
+              id="eval-objetivo"
+              :value="evalObjetivo"
+              class="eval-input"
+              type="text"
+              inputmode="decimal"
+              @change="evalObjetivo = Math.max(1, parseFloat($event.target.value) || evalObjetivo)"
+            />
+          </div>
+        </div>
+
+        <div class="eval-main-stats">
+          <div class="eval-stat-card">
+            <span>Avanzado</span>
+            <strong>${{ evalTotalUSD.toFixed(2) }}</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>Total R</span>
+            <strong>{{ evalTotalR.toFixed(2) }}R</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>Total USD</span>
+            <strong>${{ evalTotalUSD.toFixed(2) }}</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>Restan R</span>
+            <strong>{{ evalRestanR.toFixed(2) }}R</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>Restan USD</span>
+            <strong>${{ evalRestanUSD.toFixed(2) }}</strong>
+          </div>
+        </div>
+
+        <div class="eval-progress-head">
+          <span>Avance hacia meta</span>
+          <strong>{{ evalProgress }}% · Ganado ${{ evalTotalUSD.toFixed(2) }}</strong>
+        </div>
+        <div class="eval-progress-track">
+          <div class="eval-progress-fill" :style="{ width: `${evalProgress}%` }"></div>
+        </div>
+
+        <div class="eval-bottom-stats">
+          <div class="eval-stat-card">
+            <span>Trades hoy</span>
+            <strong>{{ evalTradesHoy }}</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>R hoy</span>
+            <strong>{{ evalRHoy.toFixed(2) }}</strong>
+          </div>
+          <div class="eval-stat-card">
+            <span>Win rate</span>
+            <strong>{{ evalWinRate }}%</strong>
+          </div>
+        </div>
+
+        <div class="eval-trade-row">
+          <input
+            v-model="tradeInput"
+            class="task-input"
+            type="text"
+            inputmode="decimal"
+            placeholder="Ej: 2.5 o -1 (valor en R)"
+            @keydown.enter="addTrade"
+          />
+          <button class="primary-button" @click="addTrade">+ Trade</button>
+        </div>
+
+        <div v-if="tradesList.length" class="eval-trades-list">
+          <div
+            v-for="trade in tradesList.slice(0, 8)"
+            :key="trade.id"
+            class="eval-trade-item"
+            :class="{ win: trade.r > 0, loss: trade.r < 0 }"
+          >
+            <span class="trade-r">{{ trade.r > 0 ? '+' : '' }}{{ trade.r }}R</span>
+            <span class="trade-usd">{{ trade.r > 0 ? '+' : '' }}${{ (trade.r * evalOneR).toFixed(2) }}</span>
+            <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
+          </div>
+        </div>
+      </section>
 
       <section class="pomodoro-panel">
         <div class="pomodoro-head">
