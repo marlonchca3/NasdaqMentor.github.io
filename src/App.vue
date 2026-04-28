@@ -439,6 +439,20 @@ function normalizeDate(value) {
   return d
 }
 
+function normalizeFirestoreDate(value) {
+  if (!value) return null
+
+  if (value instanceof Date) {
+    return value
+  }
+
+  if (typeof value?.toDate === 'function') {
+    return normalizeDate(value.toDate())
+  }
+
+  return normalizeDate(value)
+}
+
 function dateKey(value) {
   const d = normalizeDate(value)
   if (!d) return ''
@@ -601,7 +615,8 @@ const evalProgress = computed(() => {
 const evalTradesToday = computed(() => {
   const todayStr = new Date().toDateString()
   return tradesList.value.filter((t) => {
-    const d = t.createdAt instanceof Date ? t.createdAt : new Date(t.createdAt)
+    const d = normalizeDate(t.tradeDate || t.createdAt)
+    if (!d) return false
     return d.toDateString() === todayStr
   })
 })
@@ -627,7 +642,11 @@ function loadEval() {
     if (rawTrades) {
       const parsed = JSON.parse(rawTrades)
       tradesList.value = Array.isArray(parsed)
-        ? parsed.map((t) => ({ ...t, createdAt: new Date(t.createdAt) }))
+        ? parsed.map((t) => ({
+          ...t,
+          tradeDate: normalizeDate(t.tradeDate),
+          createdAt: normalizeDate(t.createdAt) || new Date(),
+        }))
         : []
     }
   } catch {
@@ -645,6 +664,7 @@ function persistEvalTrades() {
     JSON.stringify(
       tradesList.value.map((t) => ({
         ...t,
+        tradeDate: normalizeDate(t.tradeDate)?.toISOString() ?? t.tradeDate,
         createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
       })),
     ),
@@ -680,10 +700,14 @@ function subscribeToEval(userId) {
         session: d.data().session ?? 'Sesion',
         rules: d.data().rules ?? 1,
         note: d.data().note ?? '',
-        tradeDate: d.data().tradeDate ?? null,
-        createdAt: d.data().createdAt?.toDate() ?? new Date(),
+        tradeDate: normalizeFirestoreDate(d.data().tradeDate),
+        createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
       }))
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort((a, b) => {
+        const ta = normalizeDate(a.tradeDate || a.createdAt)?.getTime() ?? 0
+        const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
+        return tb - ta
+      })
   })
 }
 
@@ -736,7 +760,7 @@ async function addTrade() {
     session: String(tradeSession.value || 'Sesion').slice(0, 40),
     rules: Number.isFinite(rulesVal) ? Math.max(1, Math.min(99, rulesVal)) : 1,
     note: String(tradeNote.value || '').slice(0, 140),
-    tradeDate: parsedTradeDate.toISOString(),
+    tradeDate: parsedTradeDate,
   }
 
   if (user.value) {
