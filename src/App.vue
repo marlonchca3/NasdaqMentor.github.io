@@ -405,9 +405,187 @@ const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
 const tradesList = ref([])
 const tradeInput = ref('')
+const tradeDate = ref(formatDateForInput(new Date()))
+const tradeSession = ref('Sesion')
+const tradeRules = ref(1)
+const tradeNote = ref('')
+const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
 let unsubscribeEvalTrades = null
 let evalSaveTimer = null
+
+const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
+
+function formatDateForInput(date) {
+  const local = new Date(date)
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset())
+  return local.toISOString().slice(0, 10)
+}
+
+function formatDateCell(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '--'
+  }
+
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
+}
+
+function normalizeDate(value) {
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) {
+    return null
+  }
+
+  return d
+}
+
+function dateKey(value) {
+  const d = normalizeDate(value)
+  if (!d) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const monthLabel = computed(() =>
+  calendarMonth.value.toLocaleDateString('es-ES', {
+    month: 'long',
+    year: 'numeric',
+  }),
+)
+
+const monthTrades = computed(() => {
+  const y = calendarMonth.value.getFullYear()
+  const m = calendarMonth.value.getMonth()
+  return tradesList.value.filter((trade) => {
+    const d = normalizeDate(trade.tradeDate || trade.createdAt)
+    return d && d.getFullYear() === y && d.getMonth() === m
+  })
+})
+
+const evalRMes = computed(() => monthTrades.value.reduce((sum, trade) => sum + trade.r, 0))
+const evalUsdMes = computed(() => evalRMes.value * evalOneR.value)
+const evalTradesMes = computed(() => monthTrades.value.length)
+const evalDiasActivosMes = computed(() => new Set(monthTrades.value.map((trade) => dateKey(trade.tradeDate || trade.createdAt))).size)
+const evalDiasVerdesMes = computed(() => {
+  const dayTotals = new Map()
+  monthTrades.value.forEach((trade) => {
+    const key = dateKey(trade.tradeDate || trade.createdAt)
+    dayTotals.set(key, (dayTotals.get(key) || 0) + trade.r)
+  })
+  return Array.from(dayTotals.values()).filter((total) => total > 0).length
+})
+const evalWinRateMes = computed(() => {
+  if (!monthTrades.value.length) return 0
+  return Math.round((monthTrades.value.filter((trade) => trade.r > 0).length / monthTrades.value.length) * 100)
+})
+
+const calendarDayMap = computed(() => {
+  const map = new Map()
+  monthTrades.value.forEach((trade) => {
+    const key = dateKey(trade.tradeDate || trade.createdAt)
+    if (!key) return
+
+    if (!map.has(key)) {
+      map.set(key, { r: 0, trades: 0 })
+    }
+
+    const slot = map.get(key)
+    slot.r += trade.r
+    slot.trades += 1
+  })
+  return map
+})
+
+const calendarCells = computed(() => {
+  const year = calendarMonth.value.getFullYear()
+  const month = calendarMonth.value.getMonth()
+  const firstDay = new Date(year, month, 1)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstWeekday = (firstDay.getDay() + 6) % 7
+  const totalSlots = Math.ceil((firstWeekday + daysInMonth) / 7) * 7
+  const cells = []
+
+  for (let index = 0; index < totalSlots; index += 1) {
+    const dayNumber = index - firstWeekday + 1
+    const inMonth = dayNumber >= 1 && dayNumber <= daysInMonth
+    const date = inMonth ? new Date(year, month, dayNumber) : null
+    const key = inMonth ? dateKey(date) : ''
+    const stats = key ? calendarDayMap.value.get(key) : null
+
+    cells.push({
+      key: key || `empty-${index}`,
+      inMonth,
+      date,
+      dayNumber: inMonth ? dayNumber : '',
+      r: stats?.r ?? 0,
+      trades: stats?.trades ?? 0,
+    })
+  }
+
+  return cells
+})
+
+const calendarWeeks = computed(() => {
+  const weeks = []
+  for (let i = 0; i < calendarCells.value.length; i += 7) {
+    weeks.push(calendarCells.value.slice(i, i + 7))
+  }
+  return weeks
+})
+
+const weeklySummaries = computed(() =>
+  calendarWeeks.value.map((week, index) => {
+    const totals = week.reduce(
+      (acc, day) => {
+        if (!day.inMonth) return acc
+        acc.r += day.r
+        acc.trades += day.trades
+        if (day.trades > 0) {
+          acc.activeDays += 1
+        }
+        return acc
+      },
+      { r: 0, trades: 0, activeDays: 0 },
+    )
+
+    return {
+      id: `week-${index + 1}`,
+      weekNumber: index + 1,
+      ...totals,
+      usd: totals.r * evalOneR.value,
+    }
+  }),
+)
+
+function isToday(date) {
+  const today = new Date()
+  return (
+    date instanceof Date
+    && date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth()
+    && date.getDate() === today.getDate()
+  )
+}
+
+function goPrevMonth() {
+  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() - 1, 1)
+}
+
+function goNextMonth() {
+  calendarMonth.value = new Date(calendarMonth.value.getFullYear(), calendarMonth.value.getMonth() + 1, 1)
+}
+
+function goCurrentMonth() {
+  const now = new Date()
+  calendarMonth.value = new Date(now.getFullYear(), now.getMonth(), 1)
+}
+
+function clearTradeForm() {
+  tradeDate.value = formatDateForInput(new Date())
+  tradeSession.value = 'Sesion'
+  tradeRules.value = 1
+  tradeNote.value = ''
+  tradeInput.value = ''
+}
 
 const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
 const evalTotalUSD = computed(() => evalTotalR.value * evalOneR.value)
@@ -499,6 +677,10 @@ function subscribeToEval(userId) {
       .map((d) => ({
         id: d.id,
         r: d.data().r ?? 0,
+        session: d.data().session ?? 'Sesion',
+        rules: d.data().rules ?? 1,
+        note: d.data().note ?? '',
+        tradeDate: d.data().tradeDate ?? null,
         createdAt: d.data().createdAt?.toDate() ?? new Date(),
       }))
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -546,21 +728,32 @@ async function addTrade() {
   const rVal = parseFloat(tradeInput.value)
   if (!Number.isFinite(rVal) || rVal === 0) return
 
+  const rulesVal = Number.parseInt(tradeRules.value, 10)
+  const parsedTradeDate = normalizeDate(tradeDate.value || new Date()) || new Date()
+
+  const payload = {
+    r: rVal,
+    session: String(tradeSession.value || 'Sesion').slice(0, 40),
+    rules: Number.isFinite(rulesVal) ? Math.max(1, Math.min(99, rulesVal)) : 1,
+    note: String(tradeNote.value || '').slice(0, 140),
+    tradeDate: parsedTradeDate.toISOString(),
+  }
+
   if (user.value) {
     await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
-      r: rVal,
+      ...payload,
       createdAt: serverTimestamp(),
     })
   } else {
     tradesList.value.unshift({
       id: crypto.randomUUID(),
-      r: rVal,
+      ...payload,
       createdAt: new Date(),
     })
     persistEvalTrades()
   }
 
-  tradeInput.value = ''
+  clearTradeForm()
 }
 
 async function removeTrade(tradeId) {
@@ -869,106 +1062,185 @@ onMounted(() => {
 
       <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
 
-      <section class="eval-panel">
-        <p class="eval-eyebrow">Objetivo</p>
-        <h2 class="eval-title">Meta de evaluacion</h2>
+      <div class="progress-header">
+        <span>Progreso</span>
+        <strong>{{ progressValue }}%</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" :style="{ width: `${progressValue}%` }"></div>
+      </div>
 
-        <div class="eval-inputs-row">
-          <div class="eval-input-card">
-            <label for="eval-one-r">1R ($)</label>
-            <input
-              id="eval-one-r"
-              :value="evalOneR"
-              class="eval-input"
-              type="text"
-              inputmode="decimal"
-              @input="evalOneR = Math.max(0.01, parseFloat(String($event.target.value).replace(',', '.')) || evalOneR); scheduleEvalSettingsSave()"
-              @blur="saveEvalSettings"
-            />
+      <div v-if="tasks.length" class="task-list">
+        <article
+          v-for="(task, index) in tasks"
+          :key="task.id"
+          class="task-card"
+          :class="{
+            complete: task.completed,
+            dragging: dragFromIndex === index,
+            'drag-over': dragOverIndex === index && dragFromIndex !== index,
+          }"
+          draggable="true"
+          @dragstart="onDragStart(index)"
+          @dragenter.prevent="onDragEnter(index)"
+          @dragover.prevent
+          @drop.prevent="onDrop(index)"
+          @dragend="onDragEnd"
+        >
+          <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
+          <button class="toggle-button" :aria-pressed="task.completed" @click="toggleTask(task.id)">
+            <span class="toggle-indicator"></span>
+          </button>
+          <p>{{ task.title }}</p>
+          <button class="remove-button" @click="removeTask(task.id)">×</button>
+        </article>
+      </div>
+      <div v-else class="empty-state">
+        <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
+      </div>
+
+      <section class="eval-panel">
+        <div class="eval-journal-top">
+          <input v-model="tradeDate" class="eval-control" type="date" />
+          <select v-model="tradeSession" class="eval-control">
+            <option>Sesion</option>
+            <option>Londres</option>
+            <option>New York AM</option>
+            <option>New York PM</option>
+            <option>Asia</option>
+          </select>
+          <input
+            v-model.number="tradeRules"
+            class="eval-control"
+            type="number"
+            min="1"
+            max="99"
+            placeholder="Reglas"
+          />
+          <input
+            v-model="tradeInput"
+            class="eval-control"
+            type="text"
+            inputmode="decimal"
+            placeholder="R"
+            @keydown.enter="addTrade"
+          />
+          <input
+            v-model="tradeNote"
+            class="eval-control"
+            type="text"
+            maxlength="140"
+            placeholder="Nota"
+          />
+        </div>
+
+        <div class="eval-journal-actions">
+          <button class="primary-button" @click="addTrade">Guardar trade</button>
+          <button class="ghost-button" @click="clearTradeForm">Limpiar</button>
+        </div>
+
+        <div class="eval-table-wrap">
+          <table class="eval-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Sesion</th>
+                <th>Reglas</th>
+                <th>R</th>
+                <th>USD</th>
+                <th>Nota</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!tradesList.length">
+                <td colspan="7" class="empty-row">Aun no hay trades registrados</td>
+              </tr>
+              <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
+                <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
+                <td>{{ trade.session || 'Sesion' }}</td>
+                <td>{{ trade.rules || 1 }}</td>
+                <td :class="trade.r > 0 ? 'pos' : 'neg'">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
+                <td>{{ trade.r > 0 ? '+' : '' }}${{ (trade.r * evalOneR).toFixed(2) }}</td>
+                <td>{{ trade.note || '-' }}</td>
+                <td>
+                  <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="eval-calendar-head">
+          <div>
+            <p class="eval-eyebrow">Performance</p>
+            <h2 class="eval-title">Calendario mensual</h2>
           </div>
-          <div class="eval-input-card">
-            <label for="eval-objetivo">OBJETIVO ($)</label>
-            <input
-              id="eval-objetivo"
-              :value="evalObjetivo"
-              class="eval-input"
-              type="text"
-              inputmode="decimal"
-              @input="evalObjetivo = Math.max(1, parseFloat(String($event.target.value).replace(',', '.')) || evalObjetivo); scheduleEvalSettingsSave()"
-              @blur="saveEvalSettings"
-            />
+          <div class="calendar-controls">
+            <button class="calendar-nav" @click="goPrevMonth">←</button>
+            <div class="calendar-month-label">{{ monthLabel }}</div>
+            <button class="calendar-nav" @click="goNextMonth">→</button>
+            <button class="calendar-today" @click="goCurrentMonth">Hoy</button>
           </div>
         </div>
 
         <div class="eval-main-stats">
           <div class="eval-stat-card">
-            <span>Avanzado</span>
-            <strong>${{ evalTotalUSD.toFixed(2) }}</strong>
+            <span>R del mes</span>
+            <strong>{{ evalRMes.toFixed(2) }}R</strong>
           </div>
           <div class="eval-stat-card">
-            <span>Total R</span>
-            <strong>{{ evalTotalR.toFixed(2) }}R</strong>
+            <span>USD del mes</span>
+            <strong>${{ evalUsdMes.toFixed(2) }}</strong>
           </div>
           <div class="eval-stat-card">
-            <span>Total USD</span>
-            <strong>${{ evalTotalUSD.toFixed(2) }}</strong>
+            <span>Trades</span>
+            <strong>{{ evalTradesMes }}</strong>
           </div>
           <div class="eval-stat-card">
-            <span>Restan R</span>
-            <strong>{{ evalRestanR.toFixed(2) }}R</strong>
+            <span>Dias activos</span>
+            <strong>{{ evalDiasActivosMes }}</strong>
           </div>
           <div class="eval-stat-card">
-            <span>Restan USD</span>
-            <strong>${{ evalRestanUSD.toFixed(2) }}</strong>
-          </div>
-        </div>
-
-        <div class="eval-progress-head">
-          <span>Avance hacia meta</span>
-          <strong>{{ evalProgress }}% · Ganado ${{ evalTotalUSD.toFixed(2) }}</strong>
-        </div>
-        <div class="eval-progress-track">
-          <div class="eval-progress-fill" :style="{ width: `${evalProgress}%` }"></div>
-        </div>
-
-        <div class="eval-bottom-stats">
-          <div class="eval-stat-card">
-            <span>Trades hoy</span>
-            <strong>{{ evalTradesHoy }}</strong>
-          </div>
-          <div class="eval-stat-card">
-            <span>R hoy</span>
-            <strong>{{ evalRHoy.toFixed(2) }}</strong>
+            <span>Dias verdes</span>
+            <strong>{{ evalDiasVerdesMes }}</strong>
           </div>
           <div class="eval-stat-card">
             <span>Win rate</span>
-            <strong>{{ evalWinRate }}%</strong>
+            <strong>{{ evalWinRateMes }}%</strong>
           </div>
         </div>
 
-        <div class="eval-trade-row">
-          <input
-            v-model="tradeInput"
-            class="task-input"
-            type="text"
-            inputmode="decimal"
-            placeholder="Ej: 2.5 o -1 (valor en R)"
-            @keydown.enter="addTrade"
-          />
-          <button class="primary-button" @click="addTrade">+ Trade</button>
+        <div class="calendar-grid-head">
+          <span v-for="label in weekdayLabel" :key="label">{{ label }}</span>
+          <span>Semana</span>
         </div>
 
-        <div v-if="tradesList.length" class="eval-trades-list">
-          <div
-            v-for="trade in tradesList.slice(0, 8)"
-            :key="trade.id"
-            class="eval-trade-item"
-            :class="{ win: trade.r > 0, loss: trade.r < 0 }"
+        <div v-for="(week, weekIndex) in calendarWeeks" :key="`week-row-${weekIndex}`" class="calendar-week-row">
+          <article
+            v-for="day in week"
+            :key="day.key"
+            class="calendar-cell"
+            :class="{
+              empty: !day.inMonth,
+              pos: day.r > 0,
+              neg: day.r < 0,
+              today: day.inMonth && isToday(day.date),
+            }"
           >
-            <span class="trade-r">{{ trade.r > 0 ? '+' : '' }}{{ trade.r }}R</span>
-            <span class="trade-usd">{{ trade.r > 0 ? '+' : '' }}${{ (trade.r * evalOneR).toFixed(2) }}</span>
-            <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
-          </div>
+            <div v-if="day.inMonth" class="calendar-cell-content">
+              <strong>{{ day.dayNumber }}</strong>
+              <span v-if="day.trades">{{ day.r > 0 ? '+' : '' }}{{ day.r.toFixed(2) }}R</span>
+              <small v-if="day.trades">{{ day.trades }} trade{{ day.trades > 1 ? 's' : '' }}</small>
+            </div>
+          </article>
+
+          <aside class="calendar-week-summary">
+            <p>Semana {{ weeklySummaries[weekIndex]?.weekNumber || weekIndex + 1 }}</p>
+            <strong>{{ (weeklySummaries[weekIndex]?.r || 0).toFixed(2) }}R</strong>
+            <span>${{ (weeklySummaries[weekIndex]?.usd || 0).toFixed(2) }}</span>
+            <small>{{ weeklySummaries[weekIndex]?.activeDays || 0 }} dias</small>
+          </aside>
         </div>
       </section>
 
@@ -1049,42 +1321,6 @@ onMounted(() => {
         </div>
       </section>
 
-      <div class="progress-header">
-        <span>Progreso</span>
-        <strong>{{ progressValue }}%</strong>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill" :style="{ width: `${progressValue}%` }"></div>
-      </div>
-
-      <div v-if="tasks.length" class="task-list">
-        <article
-          v-for="(task, index) in tasks"
-          :key="task.id"
-          class="task-card"
-          :class="{
-            complete: task.completed,
-            dragging: dragFromIndex === index,
-            'drag-over': dragOverIndex === index && dragFromIndex !== index,
-          }"
-          draggable="true"
-          @dragstart="onDragStart(index)"
-          @dragenter.prevent="onDragEnter(index)"
-          @dragover.prevent
-          @drop.prevent="onDrop(index)"
-          @dragend="onDragEnd"
-        >
-          <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
-          <button class="toggle-button" :aria-pressed="task.completed" @click="toggleTask(task.id)">
-            <span class="toggle-indicator"></span>
-          </button>
-          <p>{{ task.title }}</p>
-          <button class="remove-button" @click="removeTask(task.id)">×</button>
-        </article>
-      </div>
-      <div v-else class="empty-state">
-        <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
-      </div>
     </section>
   </main>
 </template>
