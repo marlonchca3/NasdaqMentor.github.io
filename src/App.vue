@@ -71,9 +71,28 @@ async function saveOrder() {
 
 // ── TTS ──────────────────────────────────────────────────────────
 const ttsEnabled = ref(true)
+// Restaurar preferencia de voz
+if (typeof window !== 'undefined') {
+  const savedTts = localStorage.getItem('ttsEnabled')
+  if (savedTts !== null) {
+    ttsEnabled.value = savedTts === 'true'
+  }
+}
 const ttsSpeaking = ref(false)
+
 const ttsReady = ref(false)
 let clockInterval = null
+
+function toggleTts() {
+  ttsEnabled.value = !ttsEnabled.value
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('ttsEnabled', ttsEnabled.value)
+    if (!ttsEnabled.value && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      ttsSpeaking.value = false
+    }
+  }
+}
 
 function getSpanishVoice() {
   const voices = window.speechSynthesis.getVoices()
@@ -85,7 +104,7 @@ function getSpanishVoice() {
 }
 
 function speak(text) {
-  if (!('speechSynthesis' in window)) {
+  if (!('speechSynthesis' in window) || !ttsEnabled.value) {
     return
   }
 
@@ -157,7 +176,9 @@ function stopClock() {
 }
 
 function speakNow() {
-  speak(buildSpeechText())
+  if (ttsEnabled.value) {
+    speak(buildSpeechText())
+  }
 }
 
 function initTts() {
@@ -1026,7 +1047,7 @@ onMounted(() => {
               class="tts-toggle"
               :class="{ active: ttsEnabled }"
               :title="ttsEnabled ? 'Desactivar voz' : 'Activar voz'"
-              @click="ttsEnabled = !ttsEnabled"
+              @click="toggleTts()"
             >
               <span v-if="ttsSpeaking" class="tts-icon">🔊</span>
               <span v-else-if="ttsEnabled" class="tts-icon">🔔</span>
