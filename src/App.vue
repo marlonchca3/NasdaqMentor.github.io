@@ -405,6 +405,7 @@ const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
 const tradesList = ref([])
 const tradeInput = ref('')
+const tradeError = ref('')
 const tradeDate = ref(formatDateForInput(new Date()))
 const tradeSession = ref('Sesion')
 const tradeRules = ref(1)
@@ -702,12 +703,14 @@ function subscribeToEval(userId) {
         note: d.data().note ?? '',
         tradeDate: normalizeFirestoreDate(d.data().tradeDate),
         createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
+        rBase: d.data().rBase, // leer el valor de R guardado
       }))
       .sort((a, b) => {
         const ta = normalizeDate(a.tradeDate || a.createdAt)?.getTime() ?? 0
         const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
         return tb - ta
       })
+      .reverse()
   })
 }
 
@@ -750,7 +753,10 @@ function handlePageHide() {
 
 async function addTrade() {
   const rVal = parseFloat(tradeInput.value)
-  if (!Number.isFinite(rVal) || rVal === 0) return
+  if (!Number.isFinite(rVal) || rVal === 0) {
+    tradeError.value = 'Debes llenar el campo R antes de guardar el trade.'
+    return
+  }
 
   const rulesVal = Number.parseInt(tradeRules.value, 10)
   const parsedTradeDate = normalizeDate(tradeDate.value || new Date()) || new Date()
@@ -761,13 +767,20 @@ async function addTrade() {
     rules: Number.isFinite(rulesVal) ? Math.max(1, Math.min(99, rulesVal)) : 1,
     note: String(tradeNote.value || '').slice(0, 140),
     tradeDate: parsedTradeDate,
+    rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
   }
 
   if (user.value) {
-    await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
-      ...payload,
-      createdAt: serverTimestamp(),
-    })
+    try {
+      await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      })
+    } catch (err) {
+      tradeError.value = 'Error al guardar el trade. Verifica tu conexión o permisos.'
+      console.error('Error al guardar trade en Firestore:', err)
+      return
+    }
   } else {
     tradesList.value.unshift({
       id: crypto.randomUUID(),
@@ -1185,6 +1198,7 @@ onMounted(() => {
           <button class="primary-button" @click="addTrade">Guardar trade</button>
           <button class="ghost-button" @click="clearTradeForm">Limpiar</button>
         </div>
+        <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
 
         <div class="eval-table-wrap">
           <table class="eval-table">
@@ -1208,7 +1222,14 @@ onMounted(() => {
                 <td>{{ trade.session || 'Sesion' }}</td>
                 <td>{{ trade.rules || 1 }}</td>
                 <td :class="trade.r > 0 ? 'pos' : 'neg'">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
-                <td>{{ trade.r > 0 ? '+' : '' }}${{ (trade.r * evalOneR).toFixed(2) }}</td>
+                <td>
+                  <template v-if="typeof trade.rBase === 'number'">
+                    {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
+                  </template>
+                  <template v-else>
+                    <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
+                  </template>
+                </td>
                 <td>{{ trade.note || '-' }}</td>
                 <td>
                   <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
