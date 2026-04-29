@@ -1124,6 +1124,29 @@ onMounted(() => {
       </div>
 
       <section class="eval-panel">
+        <div class="eval-meta-top" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+          <div class="eval-meta-field">
+            <label for="r-selector" style="font-size: 0.95em; color: #7fa1d2;">Seleccionador de R ($)</label>
+            <input id="r-selector" v-model.number="evalOneR" class="eval-control" type="number" min="1" max="100000" step="1" @change="scheduleEvalSettingsSave" style="width: 120px;" />
+          </div>
+          <div class="eval-meta-field">
+            <label for="objetivo-selector" style="font-size: 0.95em; color: #7fa1d2;">Objetivo ($)</label>
+            <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" style="width: 160px;" />
+          </div>
+        </div>
+        <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <span style="font-size: 0.95em; color: #7fa1d2;">Avance objetivo:</span>
+            <strong style="color: #4ade80;">${{ evalTotalUSD.toFixed(2) }}</strong>
+            <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
+            <strong style="color: #f87171;">${{ evalRestanUSD.toFixed(2) }}</strong>
+            <span style="font-size: 0.95em; color: #7fa1d2;">Progreso:</span>
+            <strong style="color: #60a5fa;">{{ evalProgress }}%</strong>
+          </div>
+          <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
+            <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80', height: '100%', borderRadius: '8px' }"></div>
+          </div>
+        </div>
         <div class="eval-journal-top">
           <input v-model="tradeDate" class="eval-control" type="date" />
           <select v-model="tradeSession" class="eval-control">
