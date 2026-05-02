@@ -1431,7 +1431,7 @@ onMounted(() => {
 
           <aside class="calendar-week-summary">
             <p>Semana {{ weeklySummaries[weekIndex]?.weekNumber || weekIndex + 1 }}</p>
-            <strong>{{ (weeklySummaries[weekIndex]?.r || 0).toFixed(2) }}R</strong>
+            
             <span>${{ (weeklySummaries[weekIndex]?.usd || 0).toFixed(2) }}</span>
             <small>{{ weeklySummaries[weekIndex]?.activeDays || 0 }} días activos</small>
             <div style="margin-top: 0.5em; font-size: 1em; color: #60a5fa;">
