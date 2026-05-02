@@ -690,6 +690,25 @@ function clearTradeForm() {
   tradeInput.value = ''
 }
 
+async function clearAllTrades() {
+  if (!confirm('¿Seguro que deseas borrar todos los trades guardados? Esta accion no se puede deshacer.')) {
+    return
+  }
+
+  if (user.value) {
+    const batch = writeBatch(db)
+    tradesList.value.forEach((trade) => {
+      batch.delete(doc(db, 'users', user.value.uid, 'trades', trade.id))
+    })
+    await batch.commit()
+  } else {
+    tradesList.value = []
+    persistEvalTrades()
+  }
+
+  clearTradeForm()
+}
+
 const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
 const evalTotalUSD = computed(() => evalTotalR.value * evalOneR.value)
 const evalRestanR = computed(() => {
@@ -738,8 +757,8 @@ function loadEval() {
               createdAt: normalizeDate(t.createdAt) || new Date(),
             }))
             .sort((a, b) => {
-              const ta = normalizeDate(a.tradeDate || a.createdAt)?.getTime() ?? 0
-              const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
+              const ta = normalizeDate(a.createdAt)?.getTime() ?? 0
+              const tb = normalizeDate(b.createdAt)?.getTime() ?? 0
               return tb - ta
             })
         : []
@@ -800,8 +819,8 @@ function subscribeToEval(userId) {
         rBase: d.data().rBase, // leer el valor de R guardado
       }))
       .sort((a, b) => {
-        const ta = normalizeDate(a.tradeDate || a.createdAt)?.getTime() ?? 0
-        const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
+        const ta = normalizeDate(a.createdAt)?.getTime() ?? 0
+        const tb = normalizeDate(b.createdAt)?.getTime() ?? 0
         return tb - ta
       })
   })
@@ -1300,7 +1319,7 @@ onMounted(() => {
 
         <div class="eval-journal-actions">
           <button class="primary-button" @click="addTrade">Guardar trade</button>
-          <button class="ghost-button" @click="clearTradeForm">Limpiar</button>
+          <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
         </div>
         <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
 
