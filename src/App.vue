@@ -554,8 +554,10 @@ const monthTrades = computed(() => {
   })
 })
 
+// Suma de R del mes
 const evalRMes = computed(() => monthTrades.value.reduce((sum, trade) => sum + trade.r, 0))
-const evalUsdMes = computed(() => evalRMes.value * evalOneR.value)
+// USD del mes: suma de (r * rBase) de cada trade
+const evalUsdMes = computed(() => monthTrades.value.reduce((sum, trade) => sum + (trade.r * (trade.rBase ?? evalOneR.value)), 0))
 const evalTradesMes = computed(() => monthTrades.value.length)
 const evalDiasActivosMes = computed(() => new Set(monthTrades.value.map((trade) => dateKey(trade.tradeDate || trade.createdAt))).size)
 const evalDiasVerdesMes = computed(() => {
