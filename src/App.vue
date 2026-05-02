@@ -422,6 +422,63 @@ function resetPomodoro() {
 const guestStorageKey = 'nasdaq-mentor-guest-checklist'
 
 // ── Evaluacion ───────────────────────────────────────────────────
+// ── Fechas locales según ubicación ──────────────────────────────
+function obtenerFechasLocales(dias = 5) {
+  const fechas = [];
+  for (let i = 0; i < dias; i++) {
+    const fecha = new Date();
+    fecha.setDate(fecha.getDate() - i);
+    fechas.push(fecha.toLocaleString());
+  }
+  return fechas;
+}
+
+
+// Reloj local reactivo
+const relojLocal = ref(new Date().toLocaleString())
+let intervaloReloj = null
+
+// Ciudad del usuario
+const ciudad = ref('')
+
+async function obtenerCiudadPorCoords(lat, lon) {
+  try {
+    const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=es`)
+    const data = await resp.json()
+    // Buscar ciudad, pueblo o localidad
+    ciudad.value = data.address.city || data.address.town || data.address.village || data.address.hamlet || data.address.state || 'Desconocida'
+  } catch {
+    ciudad.value = 'Desconocida'
+  }
+}
+
+function detectarCiudad() {
+  if (!navigator.geolocation) {
+    ciudad.value = 'No disponible'
+    return
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      obtenerCiudadPorCoords(pos.coords.latitude, pos.coords.longitude)
+    },
+    () => {
+      ciudad.value = 'No disponible'
+    },
+    { enableHighAccuracy: false, timeout: 6000 }
+  )
+}
+
+onMounted(() => {
+  intervaloReloj = setInterval(() => {
+    relojLocal.value = new Date().toLocaleString()
+  }, 1000)
+  detectarCiudad()
+})
+
+onUnmounted(() => {
+  if (intervaloReloj) clearInterval(intervaloReloj)
+})
+
 const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
 const tradesList = ref([])
@@ -1088,6 +1145,17 @@ onMounted(() => {
       </div>
 
       <p v-if="authError" class="error-banner">{{ authError }}</p>
+
+
+      <!-- Reloj local moderno y ciudad -->
+      <section class="modern-clock">
+        <span class="clock-icon">🕒</span>
+        <div class="clock-info">
+          <span class="clock-label">Hora local</span>
+          <span class="clock-time">{{ relojLocal }}</span>
+          <span class="clock-city" v-if="ciudad">📍 {{ ciudad }}</span>
+        </div>
+      </section>
 
       <div class="stats-row">
         <div class="stat-pill">
