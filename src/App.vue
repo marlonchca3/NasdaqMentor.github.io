@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onAuthStateChanged } from 'firebase/auth'
+import PnlChart from './PnlChart.vue'
 import {
   addDoc,
   collection,
@@ -1361,6 +1362,8 @@ onMounted(() => {
             </tbody>
           </table>
         </div>
+
+        <PnlChart :trades="tradesList" :one-r="evalOneR" />
 
         <div class="eval-calendar-head">
           <div>
