@@ -581,12 +581,20 @@ const calendarDayMap = computed(() => {
     if (!key) return
 
     if (!map.has(key)) {
-      map.set(key, { r: 0, trades: 0 })
+      map.set(key, { r: 0, trades: 0, usd: 0, tradeDetails: [] })
     }
 
     const slot = map.get(key)
+    const tradeUsd = trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)
     slot.r += trade.r
     slot.trades += 1
+    slot.usd += tradeUsd
+    slot.tradeDetails.push({
+      id: trade.id,
+      session: trade.session || 'Sesion',
+      usd: tradeUsd,
+      note: trade.note || '',
+    })
   })
   return map
 })
@@ -614,6 +622,8 @@ const calendarCells = computed(() => {
       dayNumber: inMonth ? dayNumber : '',
       r: stats?.r ?? 0,
       trades: stats?.trades ?? 0,
+      usd: stats?.usd ?? 0,
+      tradeDetails: stats?.tradeDetails ?? [],
     })
   }
 
@@ -1417,15 +1427,33 @@ onMounted(() => {
             class="calendar-cell"
             :class="{
               empty: !day.inMonth,
-              pos: day.r > 0,
-              neg: day.r < 0,
+              pos: day.usd > 0,
+              neg: day.usd < 0,
               today: day.inMonth && isToday(day.date),
             }"
           >
             <div v-if="day.inMonth" class="calendar-cell-content">
               <strong>{{ day.dayNumber }}</strong>
-              <span v-if="day.trades">{{ day.r > 0 ? '+' : '' }}{{ day.r.toFixed(2) }}R</span>
-              <small v-if="day.trades">{{ day.trades }} trade{{ day.trades > 1 ? 's' : '' }}</small>
+              <small v-if="day.trades">{{ day.trades }} trade{{ day.trades > 1 ? 's' : '' }} realizados</small>
+              <small
+                v-if="day.trades"
+                class="calendar-usd"
+                :class="{ pos: day.usd > 0, neg: day.usd < 0 }"
+              >
+                {{ day.usd > 0 ? '+' : '' }}${{ day.usd.toFixed(2) }}
+              </small>
+
+              <div v-if="day.trades" class="calendar-tooltip">
+                <p>Trades del dia</p>
+                <ul>
+                  <li v-for="trade in day.tradeDetails" :key="trade.id">
+                    <span>{{ trade.session }}</span>
+                    <strong :class="trade.usd > 0 ? 'pos' : 'neg'">
+                      {{ trade.usd > 0 ? '+' : '' }}${{ trade.usd.toFixed(2) }}
+                    </strong>
+                  </li>
+                </ul>
+              </div>
             </div>
           </article>
 
