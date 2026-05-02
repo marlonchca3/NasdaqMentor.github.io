@@ -629,26 +629,34 @@ const calendarWeeks = computed(() => {
 
 const weeklySummaries = computed(() =>
   calendarWeeks.value.map((week, index) => {
-    const totals = week.reduce(
-      (acc, day) => {
-        if (!day.inMonth) return acc
-        acc.r += day.r
-        acc.trades += day.trades
-        if (day.trades > 0) {
-          acc.activeDays += 1
-        }
-        return acc
-      },
-      { r: 0, trades: 0, activeDays: 0 },
-    )
-
+    let r = 0
+    let usd = 0
+    let trades = 0
+    let activeDays = 0
+    week.forEach((day) => {
+      if (!day.inMonth) return
+      // Buscar los trades de ese día
+      const tradesForDay = monthTrades.value.filter((trade) => {
+        const d = normalizeDate(trade.tradeDate || trade.createdAt)
+        return d && d.getDate() === day.date.getDate() && d.getMonth() === day.date.getMonth() && d.getFullYear() === day.date.getFullYear()
+      })
+      if (tradesForDay.length > 0) {
+        activeDays += 1
+      }
+      trades += day.trades
+      r += day.r
+      // Sumar USD usando el rBase de cada trade
+      usd += tradesForDay.reduce((sum, t) => sum + (t.r * (typeof t.rBase === 'number' ? t.rBase : evalOneR.value)), 0)
+    })
     return {
       id: `week-${index + 1}`,
       weekNumber: index + 1,
-      ...totals,
-      usd: totals.r * evalOneR.value,
+      r,
+      trades,
+      activeDays,
+      usd,
     }
-  }),
+  })
 )
 
 function isToday(date) {
@@ -723,11 +731,17 @@ function loadEval() {
     if (rawTrades) {
       const parsed = JSON.parse(rawTrades)
       tradesList.value = Array.isArray(parsed)
-        ? parsed.map((t) => ({
-          ...t,
-          tradeDate: normalizeDate(t.tradeDate),
-          createdAt: normalizeDate(t.createdAt) || new Date(),
-        }))
+        ? parsed
+            .map((t) => ({
+              ...t,
+              tradeDate: normalizeDate(t.tradeDate),
+              createdAt: normalizeDate(t.createdAt) || new Date(),
+            }))
+            .sort((a, b) => {
+              const ta = normalizeDate(a.tradeDate || a.createdAt)?.getTime() ?? 0
+              const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
+              return tb - ta
+            })
         : []
     }
   } catch {
@@ -790,7 +804,6 @@ function subscribeToEval(userId) {
         const tb = normalizeDate(b.tradeDate || b.createdAt)?.getTime() ?? 0
         return tb - ta
       })
-      .reverse()
   })
 }
 
@@ -1398,7 +1411,10 @@ onMounted(() => {
             <p>Semana {{ weeklySummaries[weekIndex]?.weekNumber || weekIndex + 1 }}</p>
             <strong>{{ (weeklySummaries[weekIndex]?.r || 0).toFixed(2) }}R</strong>
             <span>${{ (weeklySummaries[weekIndex]?.usd || 0).toFixed(2) }}</span>
-            <small>{{ weeklySummaries[weekIndex]?.activeDays || 0 }} dias</small>
+            <small>{{ weeklySummaries[weekIndex]?.activeDays || 0 }} días activos</small>
+            <div style="margin-top: 0.5em; font-size: 1em; color: #60a5fa;">
+              Total trades: <b>{{ weeklySummaries[weekIndex]?.trades || 0 }}</b>
+            </div>
           </aside>
         </div>
       </section>
