@@ -156,6 +156,7 @@ function buildSpeechText() {
 function startClock() {
   clockInterval = setInterval(() => {
     cooldownNow.value = Date.now()
+    checkNewsAlerts()
 
     if (!ttsEnabled.value) {
       return
@@ -1287,6 +1288,7 @@ onMounted(() => {
 
   initTts()
   startClock()
+  loadNewsAlerts()
 
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
@@ -1321,6 +1323,68 @@ onMounted(() => {
     }
   }, 300)
 })
+
+// ── Noticias / Alertas ─────────────────────────────────────────
+const newsAlerts = ref([])
+const newAlertText = ref('')
+const newAlertDate = ref(formatDateForInput(new Date()))
+const newAlertTime = ref('')
+const alertsPaused = ref(false)
+
+function addNewsAlert() {
+  const text = newAlertText.value.trim()
+  if (!text || !newAlertDate.value || !newAlertTime.value) return
+  newsAlerts.value.push({
+    id: crypto.randomUUID(),
+    text,
+    date: newAlertDate.value,
+    time: newAlertTime.value,
+    fired: false,
+  })
+  newAlertText.value = ''
+  newAlertDate.value = formatDateForInput(new Date())
+  newAlertTime.value = ''
+  persistNewsAlerts()
+}
+
+function removeNewsAlert(id) {
+  newsAlerts.value = newsAlerts.value.filter((a) => a.id !== id)
+  persistNewsAlerts()
+}
+
+function toggleAlertsPause() {
+  alertsPaused.value = !alertsPaused.value
+}
+
+function persistNewsAlerts() {
+  localStorage.setItem('nasdaq-mentor-news-alerts', JSON.stringify(newsAlerts.value))
+}
+
+function loadNewsAlerts() {
+  try {
+    const raw = localStorage.getItem('nasdaq-mentor-news-alerts')
+    if (raw) newsAlerts.value = JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+}
+
+function checkNewsAlerts() {
+  if (alertsPaused.value) return
+  const now = new Date()
+  newsAlerts.value.forEach((alert) => {
+    if (alert.fired) return
+    const [yr, mo, dy] = alert.date.split('-').map(Number)
+    const [hh, mm] = alert.time.split(':').map(Number)
+    const alertTime = new Date(yr, mo - 1, dy, hh, mm, 0, 0)
+    const diffMin = (alertTime.getTime() - now.getTime()) / 60000
+    if (diffMin <= 15 && diffMin > 14) {
+      alert.fired = true
+      speak(`Alerta: ${alert.text} en 15 minutos.`)
+      persistNewsAlerts()
+    }
+  })
+}
 </script>
 
 <template>
@@ -1797,6 +1861,56 @@ onMounted(() => {
           </button>
           <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
           <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
+        </div>
+      </section>
+
+      <!-- ── Noticias / Alertas ── -->
+      <section class="noticias-panel">
+        <div class="noticias-head">
+          <div class="noticias-head-left">
+            <p class="noticias-eyebrow">ALERTAS</p>
+            <h2 class="noticias-title">Noticias Nasdaq</h2>
+            <p class="noticias-sub">Crea alertas manuales para CPI, Powell, NFP o cualquier evento que quieras vigilar y la app te avisa 15 minutos antes.</p>
+            <p class="noticias-info">Tus recordatorios manuales avisarán por notificación y voz 15 minutos antes.</p>
+            <button class="ghost-button noticias-pause-btn" @click="toggleAlertsPause">
+              {{ alertsPaused ? 'Reanudar alertas' : 'Pausar alertas' }}
+            </button>
+          </div>
+          <div class="noticias-active-badge">
+            <span>Alertas Nasdaq activas</span>
+          </div>
+        </div>
+
+        <div class="noticias-form">
+          <input
+            v-model="newAlertText"
+            class="eval-control noticias-input-main"
+            type="text"
+            placeholder="Agregar alerta manual: CPI, Powell, NVIDIA earnings"
+            @keydown.enter="addNewsAlert"
+          />
+          <input v-model="newAlertDate" class="eval-control" type="date" />
+          <input v-model="newAlertTime" class="eval-control" type="time" />
+          <button class="primary-button" @click="addNewsAlert">Agregar alerta</button>
+        </div>
+
+        <div v-if="!newsAlerts.length" class="noticias-empty">
+          No hay alertas cargadas todavía. Agrega tu próximo evento manual y la app te avisará 15 minutos antes.
+        </div>
+        <div v-else class="noticias-list">
+          <div
+            v-for="alert in newsAlerts"
+            :key="alert.id"
+            class="noticias-item"
+            :class="{ 'noticias-item--fired': alert.fired }"
+          >
+            <div class="noticias-item-info">
+              <strong>{{ alert.text }}</strong>
+              <span>{{ alert.date }} · {{ alert.time }}</span>
+            </div>
+            <span v-if="alert.fired" class="noticias-fired-badge">Avisado</span>
+            <button class="eval-remove-btn" @click="removeNewsAlert(alert.id)">×</button>
+          </div>
         </div>
       </section>
 
