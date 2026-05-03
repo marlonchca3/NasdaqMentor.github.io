@@ -517,6 +517,14 @@ function formatDateCell(date) {
 }
 
 function normalizeDate(value) {
+  if (typeof value === 'string') {
+    const localDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (localDateMatch) {
+      const [, year, month, day] = localDateMatch
+      return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0)
+    }
+  }
+
   const d = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(d.getTime())) {
     return null
@@ -729,10 +737,15 @@ async function clearAllTrades() {
 }
 
 const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
-const evalTotalUSD = computed(() => evalTotalR.value * evalOneR.value)
+const evalTotalUSD = computed(() =>
+  tradesList.value.reduce(
+    (sum, trade) => sum + (trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)),
+    0,
+  ),
+)
 const evalRestanR = computed(() => {
   if (!evalOneR.value) return 0
-  return (evalObjetivo.value / evalOneR.value) - evalTotalR.value
+  return (evalObjetivo.value - evalTotalUSD.value) / evalOneR.value
 })
 const evalRestanUSD = computed(() => evalObjetivo.value - evalTotalUSD.value)
 const evalProgress = computed(() => {
