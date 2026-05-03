@@ -1390,10 +1390,6 @@ onMounted(() => {
 
         <div class="eval-main-stats">
           <div class="eval-stat-card">
-            <span>R del mes</span>
-            <strong>{{ evalRMes.toFixed(2) }}R</strong>
-          </div>
-          <div class="eval-stat-card">
             <span>USD del mes</span>
             <strong>${{ evalUsdMes.toFixed(2) }}</strong>
           </div>
