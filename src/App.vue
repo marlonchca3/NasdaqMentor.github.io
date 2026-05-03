@@ -493,7 +493,6 @@ const tradeInput = ref('')
 const tradeError = ref('')
 const tradeDate = ref(formatDateForInput(new Date()))
 const tradeSession = ref('Sesion')
-const tradeRules = ref(1)
 const tradeNote = ref('')
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
@@ -710,7 +709,6 @@ function goCurrentMonth() {
 function clearTradeForm() {
   tradeDate.value = formatDateForInput(new Date())
   tradeSession.value = 'Sesion'
-  tradeRules.value = 1
   tradeNote.value = ''
   tradeInput.value = ''
   tradeCompliance.value = null
@@ -1040,13 +1038,11 @@ async function addTrade() {
     return
   }
 
-  const rulesVal = Number.parseInt(tradeRules.value, 10)
   const parsedTradeDate = normalizeDate(tradeDate.value || new Date()) || new Date()
 
   const payload = {
     r: rVal,
     session: String(tradeSession.value || 'Sesion').slice(0, 40),
-    rules: Number.isFinite(rulesVal) ? Math.max(1, Math.min(99, rulesVal)) : 1,
     note: String(tradeNote.value || '').slice(0, 140),
     tradeDate: parsedTradeDate,
     rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
@@ -1556,9 +1552,9 @@ onMounted(() => {
         <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
           <div style="display: flex; align-items: center; gap: 1rem;">
             <span style="font-size: 0.95em; color: #7fa1d2;">Avance objetivo:</span>
-            <strong style="color: #4ade80;">${{ evalTotalUSD.toFixed(2) }}</strong>
+            <strong :style="{ color: evalTotalUSD < 0 ? '#facc15' : '#4ade80' }">${{ evalTotalUSD.toFixed(2) }}</strong>
             <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
-            <strong style="color: #f87171;">${{ evalRestanUSD.toFixed(2) }}</strong>
+            <strong :style="{ color: evalRestanUSD > 0 ? '#4ade80' : '#facc15' }">${{ evalRestanUSD.toFixed(2) }}</strong>
             <span style="font-size: 0.95em; color: #7fa1d2;">Progreso:</span>
             <strong style="color: #60a5fa;">{{ evalProgress }}%</strong>
           </div>
@@ -1575,14 +1571,6 @@ onMounted(() => {
             <option>New York PM</option>
             <option>Asia</option>
           </select>
-          <input
-            v-model.number="tradeRules"
-            class="eval-control"
-            type="number"
-            min="1"
-            max="99"
-            placeholder="Reglas"
-          />
           <input
             v-model="tradeInput"
             class="eval-control"
@@ -1610,25 +1598,20 @@ onMounted(() => {
           <table class="eval-table">
             <thead>
               <tr>
-                <th>Fecha</th>
-                <th>Sesion</th>
-                <th>Reglas</th>
-                <th>R</th>
                 <th>USD</th>
+                <th>R</th>
+                <th>Sesion</th>
                 <th>Nota</th>
+                <th>Fecha</th>
                 <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!tradesList.length">
-                <td colspan="7" class="empty-row">Aun no hay trades registrados</td>
+                <td colspan="6" class="empty-row">Aun no hay trades registrados</td>
               </tr>
               <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
-                <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
-                <td>{{ trade.session || 'Sesion' }}</td>
-                <td>{{ trade.rules || 1 }}</td>
-                <td :class="trade.r > 0 ? 'pos' : 'neg'">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
-                <td>
+                <td :class="(trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) > 0 ? 'pos' : ((trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) < 0 ? 'neg' : '')">
                   <template v-if="typeof trade.rBase === 'number'">
                     {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
                   </template>
@@ -1636,7 +1619,10 @@ onMounted(() => {
                     <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
                   </template>
                 </td>
+                <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
+                <td>{{ trade.session || 'Sesion' }}</td>
                 <td>{{ trade.note || '-' }}</td>
+                <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
                 <td>
                   <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
                 </td>

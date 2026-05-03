@@ -1185,7 +1185,7 @@ h1 {
 }
 
 .eval-table .neg {
-  color: #f6b7c4;
+  color: #facc15;
   font-weight: 700;
 }
 
@@ -1306,8 +1306,8 @@ h1 {
 }
 
 .calendar-cell.neg {
-  border-color: rgba(220, 60, 90, 0.26);
-  background: rgba(42, 10, 18, 0.55);
+  border-color: rgba(250, 204, 21, 0.35);
+  background: rgba(54, 44, 8, 0.55);
 }
 
 .calendar-cell-content {
@@ -1338,7 +1338,15 @@ h1 {
 }
 
 .calendar-usd.neg {
-  color: #ff9ab0;
+  color: #facc15;
+}
+
+.calendar-tooltip strong.pos {
+  color: #7dffb3;
+}
+
+.calendar-tooltip strong.neg {
+  color: #facc15;
 }
 
 .calendar-tooltip {

@@ -26,8 +26,8 @@
             <stop offset="100%" stop-color="#1cc767" stop-opacity="0.02" />
           </linearGradient>
           <linearGradient id="pnlGradNeg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#f87171" stop-opacity="0.02" />
-            <stop offset="100%" stop-color="#f87171" stop-opacity="0.28" />
+            <stop offset="0%" stop-color="#facc15" stop-opacity="0.02" />
+            <stop offset="100%" stop-color="#facc15" stop-opacity="0.28" />
           </linearGradient>
         </defs>
 
@@ -61,7 +61,7 @@
         <path
           :d="linePath"
           fill="none"
-          :stroke="totalUSD >= 0 ? '#1cc767' : '#f87171'"
+          :stroke="totalUSD >= 0 ? '#1cc767' : '#facc15'"
           stroke-width="2.5"
           stroke-linejoin="round"
           stroke-linecap="round"
@@ -95,7 +95,7 @@
           :cx="plotPoints[plotPoints.length - 1].x"
           :cy="plotPoints[plotPoints.length - 1].y"
           r="4"
-          :fill="totalUSD >= 0 ? '#1cc767' : '#f87171'"
+          :fill="totalUSD >= 0 ? '#1cc767' : '#facc15'"
           stroke="#0d1b2e"
           stroke-width="2"
         />
@@ -283,7 +283,7 @@ const xLabels = computed(() => {
 }
 
 .pnl-total.pos { color: #1cc767; }
-.pnl-total.neg { color: #f87171; }
+.pnl-total.neg { color: #facc15; }
 
 .pnl-trades-count {
   font-size: 0.82rem;
