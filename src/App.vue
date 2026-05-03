@@ -84,6 +84,7 @@ const ttsSpeaking = ref(false)
 
 const ttsReady = ref(false)
 let clockInterval = null
+const cooldownNow = ref(Date.now())
 
 function toggleTts() {
   ttsEnabled.value = !ttsEnabled.value
@@ -154,6 +155,8 @@ function buildSpeechText() {
 
 function startClock() {
   clockInterval = setInterval(() => {
+    cooldownNow.value = Date.now()
+
     if (!ttsEnabled.value) {
       return
     }
@@ -755,6 +758,54 @@ const evalWinRate = computed(() => {
 const emotionalState = ref(null)   // 'calmado' | 'ansioso' | null
 const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
 const weeklyDisciplineBarRef = ref(null)
+const operationLockUntil = ref(0)
+
+function applyOperationLock(minutes) {
+  const nextLockUntil = Date.now() + (minutes * 60 * 1000)
+  operationLockUntil.value = Math.max(operationLockUntil.value, nextLockUntil)
+}
+
+const operationLockRemainingMs = computed(() =>
+  Math.max(0, operationLockUntil.value - cooldownNow.value),
+)
+
+const isOperationLocked = computed(() => operationLockRemainingMs.value > 0)
+
+const operationLockCountdown = computed(() => {
+  if (!isOperationLocked.value) {
+    return ''
+  }
+
+  const totalSeconds = Math.ceil(operationLockRemainingMs.value / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+})
+
+function selectEmotionalState(state) {
+  emotionalState.value = emotionalState.value === state ? null : state
+
+  if (emotionalState.value === 'calmado') {
+    speak('Estado emocional confirmado. Estás listo para operar.')
+  } else if (emotionalState.value === 'ansioso') {
+    speak('No operes todavía. Respira y espera por 20 minutos.')
+    applyOperationLock(20)
+  }
+}
+
+function selectTradeCompliance(value) {
+  tradeCompliance.value = tradeCompliance.value === value ? null : value
+
+  if (tradeCompliance.value === 'segui') {
+    speak('Excelente disciplina. Trade validado.')
+  } else if (tradeCompliance.value === 'parcial') {
+    speak('Cumplimiento parcial. Revisa qué faltó.')
+    applyOperationLock(10)
+  } else if (tradeCompliance.value === 'fallo') {
+    speak('Alerta de disciplina. Detén la operativa y revisa tus reglas.')
+    applyOperationLock(20)
+  }
+}
 
 function getWeekStart() {
   const now = new Date()
@@ -796,17 +847,35 @@ const weeklyDisciplinePercent = computed(() =>
 )
 
 const complianceTitle = computed(() => {
-  if (tradeCompliance.value === 'segui') return 'Seguiste tus reglas'
-  if (tradeCompliance.value === 'parcial') return 'Seguiste parcialmente'
-  if (tradeCompliance.value === 'fallo') return 'No seguiste tus reglas'
+  if (tradeCompliance.value === 'segui') return 'Seguí'
+  if (tradeCompliance.value === 'parcial') return 'Parcial'
+  if (tradeCompliance.value === 'fallo') return 'No seguí'
   return 'Selecciona el cumplimiento del trade'
 })
 
 const complianceCopy = computed(() => {
-  if (tradeCompliance.value === 'segui') return 'Trade validado con disciplina completa. La tarjeta queda verde y suma fuerte a tu progreso semanal.'
-  if (tradeCompliance.value === 'parcial') return 'Seguiste parte de las reglas. Reflexiona qué falló para mejorar la próxima vez.'
-  if (tradeCompliance.value === 'fallo') return 'No seguiste el plan. Esto resta puntos de disciplina semanal.'
+  if (tradeCompliance.value === 'segui') return 'Excelente disciplina. Trade validado.'
+  if (tradeCompliance.value === 'parcial') return 'Cumplimiento parcial. Revisa qué faltó.'
+  if (tradeCompliance.value === 'fallo') return 'Alerta de disciplina. Detén la operativa y revisa tus reglas.'
   return 'Define si seguiste tus reglas al operar este trade.'
+})
+
+const emotionalCopy = computed(() => {
+  if (emotionalState.value === 'calmado') {
+    return 'Estado emocional confirmado. Estás listo para operar.'
+  }
+  if (emotionalState.value === 'ansioso') {
+    return 'No operes todavía. Respira y espera por 20 minutos.'
+  }
+  return 'Este filtro emocional es obligatorio para abrir la operativa del día.'
+})
+
+const lockoutCopy = computed(() => {
+  if (!isOperationLocked.value) {
+    return ''
+  }
+
+  return `Operativa bloqueada temporalmente. Tiempo restante: ${operationLockCountdown.value}.`
 })
 
 const guestEvalKey = 'nasdaq-mentor-guest-eval'
@@ -939,6 +1008,11 @@ function handlePageHide() {
 }
 
 async function addTrade() {
+  if (isOperationLocked.value) {
+    tradeError.value = `Operativa bloqueada. Espera ${operationLockCountdown.value} antes de guardar otro trade.`
+    return
+  }
+
   if (!emotionalState.value) {
     tradeError.value = 'Debes confirmar tu estado emocional antes de registrar un trade.'
     return
@@ -1386,19 +1460,19 @@ onMounted(() => {
             <div>
               <p class="filter-eyebrow">Checklist Emocional</p>
               <h2 class="filter-title">Confirma tu estado antes de operar</h2>
-              <p class="filter-copy">Este filtro emocional es obligatorio para abrir la operativa del día.</p>
+              <p class="filter-copy">{{ emotionalCopy }}</p>
             </div>
             <div class="emotional-btns">
               <button
                 class="emotional-btn"
                 :class="{ 'emotional-btn--calm': emotionalState === 'calmado' }"
-                @click="emotionalState = emotionalState === 'calmado' ? null : 'calmado'"
-              >Estas calmado</button>
+                @click="selectEmotionalState('calmado')"
+              >Estás calmado</button>
               <button
                 class="emotional-btn"
                 :class="{ 'emotional-btn--anxious': emotionalState === 'ansioso' }"
-                @click="emotionalState = emotionalState === 'ansioso' ? null : 'ansioso'"
-              >Estas ansioso</button>
+                @click="selectEmotionalState('ansioso')"
+              >Estás ansioso</button>
             </div>
           </div>
         </div>
@@ -1416,7 +1490,7 @@ onMounted(() => {
             <button
               class="compliance-card compliance-card--segui"
               :class="{ active: tradeCompliance === 'segui' }"
-              @click="tradeCompliance = tradeCompliance === 'segui' ? null : 'segui'"
+              @click="selectTradeCompliance('segui')"
             >
               <strong>Seguí</strong>
               <span>Tarjeta verde</span>
@@ -1424,7 +1498,7 @@ onMounted(() => {
             <button
               class="compliance-card compliance-card--parcial"
               :class="{ active: tradeCompliance === 'parcial' }"
-              @click="tradeCompliance = tradeCompliance === 'parcial' ? null : 'parcial'"
+              @click="selectTradeCompliance('parcial')"
             >
               <strong>Parcial</strong>
               <span>Tarjeta amarilla</span>
@@ -1432,7 +1506,7 @@ onMounted(() => {
             <button
               class="compliance-card compliance-card--fallo"
               :class="{ active: tradeCompliance === 'fallo' }"
-              @click="tradeCompliance = tradeCompliance === 'fallo' ? null : 'fallo'"
+              @click="selectTradeCompliance('fallo')"
             >
               <strong>No seguí</strong>
               <span>Tarjeta roja</span>
@@ -1452,6 +1526,7 @@ onMounted(() => {
           <div class="discipline-track">
             <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
           </div>
+          <p v-if="isOperationLocked" class="filter-warning">{{ lockoutCopy }}</p>
           <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
         </div>
 
@@ -1513,7 +1588,7 @@ onMounted(() => {
         </div>
 
         <div class="eval-journal-actions">
-          <button class="primary-button" @click="addTrade">Guardar trade</button>
+          <button class="primary-button" :disabled="isOperationLocked" @click="addTrade">Guardar trade</button>
           <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
         </div>
         <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
