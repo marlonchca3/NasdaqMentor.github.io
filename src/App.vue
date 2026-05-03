@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { gsap } from 'gsap'
 import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
 import {
@@ -197,6 +198,8 @@ function initTts() {
   tryInit()
   window.speechSynthesis.onvoiceschanged = tryInit
 }
+
+const progressFillRef = ref(null)
 
 const completedCount = computed(() => tasks.value.filter((task) => task.completed).length)
 const pendingCount = computed(() => tasks.value.length - completedCount.value)
@@ -699,6 +702,8 @@ function clearTradeForm() {
   tradeRules.value = 1
   tradeNote.value = ''
   tradeInput.value = ''
+  tradeCompliance.value = null
+  tradeError.value = ''
 }
 
 async function clearAllTrades() {
@@ -744,6 +749,64 @@ const evalRHoy = computed(() => evalTradesToday.value.reduce((sum, t) => sum + t
 const evalWinRate = computed(() => {
   if (!tradesList.value.length) return 0
   return Math.round((tradesList.value.filter((t) => t.r > 0).length / tradesList.value.length) * 100)
+})
+
+// ── Checklist emocional & Disciplina ──────────────────────────────
+const emotionalState = ref(null)   // 'calmado' | 'ansioso' | null
+const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
+const weeklyDisciplineBarRef = ref(null)
+
+function getWeekStart() {
+  const now = new Date()
+  const day = now.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const monday = new Date(now)
+  monday.setDate(now.getDate() + diff)
+  monday.setHours(0, 0, 0, 0)
+  return monday
+}
+
+const weeklyTrades = computed(() => {
+  const weekStart = getWeekStart()
+  return tradesList.value.filter((t) => {
+    const d = normalizeDate(t.tradeDate || t.createdAt)
+    return d && d >= weekStart
+  })
+})
+
+const weeklyStats = computed(() => {
+  let segui = 0
+  let parcial = 0
+  let fallo = 0
+  weeklyTrades.value.forEach((t) => {
+    if (t.compliance === 'segui') segui++
+    else if (t.compliance === 'parcial') parcial++
+    else if (t.compliance === 'fallo') fallo++
+  })
+  return { segui, parcial, fallo, total: weeklyTrades.value.length }
+})
+
+const weeklyDisciplineScore = computed(() => {
+  const { segui, parcial, fallo } = weeklyStats.value
+  return segui * 20 + parcial * 10 + fallo * (-20)
+})
+
+const weeklyDisciplinePercent = computed(() =>
+  Math.max(0, Math.min(100, weeklyDisciplineScore.value)),
+)
+
+const complianceTitle = computed(() => {
+  if (tradeCompliance.value === 'segui') return 'Seguiste tus reglas'
+  if (tradeCompliance.value === 'parcial') return 'Seguiste parcialmente'
+  if (tradeCompliance.value === 'fallo') return 'No seguiste tus reglas'
+  return 'Selecciona el cumplimiento del trade'
+})
+
+const complianceCopy = computed(() => {
+  if (tradeCompliance.value === 'segui') return 'Trade validado con disciplina completa. La tarjeta queda verde y suma fuerte a tu progreso semanal.'
+  if (tradeCompliance.value === 'parcial') return 'Seguiste parte de las reglas. Reflexiona qué falló para mejorar la próxima vez.'
+  if (tradeCompliance.value === 'fallo') return 'No seguiste el plan. Esto resta puntos de disciplina semanal.'
+  return 'Define si seguiste tus reglas al operar este trade.'
 })
 
 const guestEvalKey = 'nasdaq-mentor-guest-eval'
@@ -828,6 +891,7 @@ function subscribeToEval(userId) {
         tradeDate: normalizeFirestoreDate(d.data().tradeDate),
         createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
         rBase: d.data().rBase, // leer el valor de R guardado
+        compliance: d.data().compliance ?? null,
       }))
       .sort((a, b) => {
         const ta = normalizeDate(a.createdAt)?.getTime() ?? 0
@@ -875,6 +939,14 @@ function handlePageHide() {
 }
 
 async function addTrade() {
+  if (!emotionalState.value) {
+    tradeError.value = 'Debes confirmar tu estado emocional antes de registrar un trade.'
+    return
+  }
+  if (!tradeCompliance.value) {
+    tradeError.value = 'Debes seleccionar el cumplimiento de reglas antes de guardar el trade.'
+    return
+  }
   const rVal = parseFloat(tradeInput.value)
   if (!Number.isFinite(rVal) || rVal === 0) {
     tradeError.value = 'Debes llenar el campo R antes de guardar el trade.'
@@ -891,6 +963,8 @@ async function addTrade() {
     note: String(tradeNote.value || '').slice(0, 140),
     tradeDate: parsedTradeDate,
     rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
+    compliance: tradeCompliance.value,
+    emotional: emotionalState.value,
   }
 
   if (user.value) {
@@ -1079,6 +1153,22 @@ watch(tasks, () => {
   }
 }, { deep: true })
 
+watch(progressValue, (newVal) => {
+  if (progressFillRef.value) {
+    gsap.to(progressFillRef.value, {
+      width: `${newVal}%`,
+      duration: 0.6,
+      ease: 'power2.out',
+    })
+  }
+})
+
+watch(weeklyDisciplinePercent, (val) => {
+  if (weeklyDisciplineBarRef.value) {
+    gsap.to(weeklyDisciplineBarRef.value, { width: `${val}%`, duration: 0.8, ease: 'power2.out' })
+  }
+})
+
 watch(pomodoroGoalHours, (value) => {
   if (!Number.isFinite(value)) {
     pomodoroGoalHours.value = 4
@@ -1130,6 +1220,23 @@ onMounted(() => {
     loadTasks()
     loadEval()
   })
+
+  setTimeout(() => {
+    if (progressFillRef.value) {
+      gsap.fromTo(
+        progressFillRef.value,
+        { width: '0%' },
+        { width: `${progressValue.value}%`, duration: 0.8, ease: 'power2.out' },
+      )
+    }
+    if (weeklyDisciplineBarRef.value) {
+      gsap.fromTo(
+        weeklyDisciplineBarRef.value,
+        { width: '0%' },
+        { width: `${weeklyDisciplinePercent.value}%`, duration: 0.9, ease: 'power2.out' },
+      )
+    }
+  }, 300)
 })
 </script>
 
@@ -1237,8 +1344,9 @@ onMounted(() => {
         <span>Progreso</span>
         <strong>{{ progressValue }}%</strong>
       </div>
+
       <div class="progress-track">
-        <div class="progress-fill" :style="{ width: `${progressValue}%` }"></div>
+        <div ref="progressFillRef" class="progress-fill"></div>
       </div>
 
       <div v-if="tasks.length" class="task-list">
@@ -1271,6 +1379,82 @@ onMounted(() => {
       </div>
 
       <section class="eval-panel">
+
+        <!-- ── Checklist emocional ── -->
+        <div class="filter-section">
+          <div class="filter-section-head">
+            <div>
+              <p class="filter-eyebrow">Checklist Emocional</p>
+              <h2 class="filter-title">Confirma tu estado antes de operar</h2>
+              <p class="filter-copy">Este filtro emocional es obligatorio para abrir la operativa del día.</p>
+            </div>
+            <div class="emotional-btns">
+              <button
+                class="emotional-btn"
+                :class="{ 'emotional-btn--calm': emotionalState === 'calmado' }"
+                @click="emotionalState = emotionalState === 'calmado' ? null : 'calmado'"
+              >Estas calmado</button>
+              <button
+                class="emotional-btn"
+                :class="{ 'emotional-btn--anxious': emotionalState === 'ansioso' }"
+                @click="emotionalState = emotionalState === 'ansioso' ? null : 'ansioso'"
+              >Estas ansioso</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Cumplimiento de reglas ── -->
+        <div class="filter-section">
+          <div class="filter-section-head">
+            <div>
+              <p class="filter-eyebrow">Cumplimiento de Reglas</p>
+              <h2 class="filter-title">{{ complianceTitle }}</h2>
+              <p class="filter-copy">{{ complianceCopy }}</p>
+            </div>
+          </div>
+          <div class="compliance-cards">
+            <button
+              class="compliance-card compliance-card--segui"
+              :class="{ active: tradeCompliance === 'segui' }"
+              @click="tradeCompliance = tradeCompliance === 'segui' ? null : 'segui'"
+            >
+              <strong>Seguí</strong>
+              <span>Tarjeta verde</span>
+            </button>
+            <button
+              class="compliance-card compliance-card--parcial"
+              :class="{ active: tradeCompliance === 'parcial' }"
+              @click="tradeCompliance = tradeCompliance === 'parcial' ? null : 'parcial'"
+            >
+              <strong>Parcial</strong>
+              <span>Tarjeta amarilla</span>
+            </button>
+            <button
+              class="compliance-card compliance-card--fallo"
+              :class="{ active: tradeCompliance === 'fallo' }"
+              @click="tradeCompliance = tradeCompliance === 'fallo' ? null : 'fallo'"
+            >
+              <strong>No seguí</strong>
+              <span>Tarjeta roja</span>
+            </button>
+          </div>
+
+          <div class="discipline-row">
+            <span class="discipline-label">Disciplina semanal</span>
+            <span class="discipline-stats">
+              {{ weeklyDisciplinePercent }}% &middot;
+              {{ weeklyStats.segui }} segui +20 &middot;
+              {{ weeklyStats.parcial }} parcial +10 &middot;
+              {{ weeklyStats.fallo }} fallo -20 &middot;
+              {{ weeklyStats.total }} toque(s)
+            </span>
+          </div>
+          <div class="discipline-track">
+            <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
+          </div>
+          <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
+        </div>
+
         <div class="eval-meta-top" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
           <div class="eval-meta-field">
             <label for="r-selector" style="font-size: 0.95em; color: #7fa1d2;">Seleccionador de R ($)</label>
