@@ -786,9 +786,9 @@ function selectEmotionalState(state) {
   emotionalState.value = emotionalState.value === state ? null : state
 
   if (emotionalState.value === 'calmado') {
-    speak('Estado emocional confirmado. Estás listo para operar.')
+    speak('Estado emocional calmado. Estás listo para operar.')
   } else if (emotionalState.value === 'ansioso') {
-    speak('No operes todavía. Respira y espera por 20 minutos.')
+    speak('Estas ansioso, no operes todavía. Respira y espera por 20 minutos.')
     applyOperationLock(20)
   }
 }
