@@ -156,6 +156,7 @@ function buildSpeechText() {
 function startClock() {
   clockInterval = setInterval(() => {
     cooldownNow.value = Date.now()
+    checkNewsAlerts()
 
     if (!ttsEnabled.value) {
       return
@@ -1287,6 +1288,7 @@ onMounted(() => {
 
   initTts()
   startClock()
+  loadNewsAlerts()
 
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
@@ -1303,6 +1305,8 @@ onMounted(() => {
     loadTasks()
     loadEval()
   })
+
+  loadNewsAlerts()
 
   setTimeout(() => {
     if (progressFillRef.value) {
@@ -1321,19 +1325,128 @@ onMounted(() => {
     }
   }, 300)
 })
+
+// ── Navegacion lateral ──────────────────────────────────────────
+const activeSection = ref('checklist')
+const navItems = [
+  { id: 'checklist', icon: '✓', label: 'Checklist' },
+  { id: 'diario',    icon: '📊', label: 'Diario' },
+  { id: 'calendario',icon: '📅', label: 'Calendario' },
+  { id: 'pomodoro',  icon: '⏱', label: 'Pomodoro' },
+  { id: 'noticias',  icon: '📰', label: 'Noticias' },
+]
+
+// ── Noticias / Alertas ──────────────────────────────────────────
+const newsAlerts = ref([])
+const newAlertText = ref('')
+const newAlertDate = ref(formatDateForInput(new Date()))
+const newAlertTime = ref('')
+const alertsPaused = ref(false)
+
+function addNewsAlert() {
+  const text = newAlertText.value.trim()
+  if (!text || !newAlertDate.value || !newAlertTime.value) return
+  newsAlerts.value.push({
+    id: crypto.randomUUID(),
+    text,
+    date: newAlertDate.value,
+    time: newAlertTime.value,
+    fired: false,
+  })
+  newAlertText.value = ''
+  newAlertDate.value = formatDateForInput(new Date())
+  newAlertTime.value = ''
+  persistNewsAlerts()
+}
+
+function removeNewsAlert(id) {
+  newsAlerts.value = newsAlerts.value.filter((a) => a.id !== id)
+  persistNewsAlerts()
+}
+
+function toggleAlertsPause() {
+  alertsPaused.value = !alertsPaused.value
+}
+
+function persistNewsAlerts() {
+  localStorage.setItem('nasdaq-mentor-news-alerts', JSON.stringify(newsAlerts.value))
+}
+
+function loadNewsAlerts() {
+  try {
+    const raw = localStorage.getItem('nasdaq-mentor-news-alerts')
+    if (raw) newsAlerts.value = JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+}
+
+function checkNewsAlerts() {
+  if (alertsPaused.value) return
+  const now = new Date()
+  newsAlerts.value.forEach((alert) => {
+    if (alert.fired) return
+    const [yr, mo, dy] = alert.date.split('-').map(Number)
+    const [hh, mm] = alert.time.split(':').map(Number)
+    const alertTime = new Date(yr, mo - 1, dy, hh, mm, 0, 0)
+    const diffMin = (alertTime.getTime() - now.getTime()) / 60000
+    if (diffMin <= 15 && diffMin > 14) {
+      alert.fired = true
+      speak(`Alerta: ${alert.text} en 15 minutos.`)
+      persistNewsAlerts()
+    }
+  })
+}
 </script>
 
 <template>
   <main class="page-shell">
-    <section class="app-card">
-      <div class="hero-row">
-        <div>
+
+    <!-- ── Sidebar ── -->
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <span class="sidebar-logo-mark">NM</span>
+        <span class="sidebar-logo-text">Nasdaq<br>Mentor</span>
+      </div>
+
+      <ul class="sidebar-nav">
+        <li
+          v-for="item in navItems"
+          :key="item.id"
+          class="sidebar-nav-item"
+          :class="{ active: activeSection === item.id }"
+          @click="activeSection = item.id"
+        >
+          <span class="sidebar-nav-icon">{{ item.icon }}</span>
+          <span class="sidebar-nav-label">{{ item.label }}</span>
+        </li>
+      </ul>
+
+      <div class="sidebar-bottom">
+        <div v-if="authReady && user" class="sidebar-user">
+          <img v-if="user.photoURL" :src="user.photoURL" :alt="user.displayName || 'Usuario'" class="avatar avatar--sm" />
+          <div class="sidebar-user-info">
+            <strong>{{ user.displayName }}</strong>
+            <span>{{ user.email }}</span>
+          </div>
+          <button class="sidebar-logout" :disabled="loading" title="Salir" @click="handleLogout">⏏</button>
+        </div>
+        <button v-else-if="authReady" class="google-button sidebar-login" :disabled="loading" @click="handleGoogleLogin">
+          {{ loading ? '...' : 'Iniciar sesion' }}
+        </button>
+      </div>
+    </nav>
+
+    <!-- ── Contenido principal ── -->
+    <div class="main-content">
+      <p v-if="authError" class="error-banner">{{ authError }}</p>
+
+      <!-- ── Checklist ── -->
+      <div v-show="activeSection === 'checklist'" class="section-view">
+        <div class="section-header">
           <p class="eyebrow">Checklist</p>
           <h1>Tareas del dia</h1>
-          <p class="subcopy">
-            Organiza tu enfoque diario y marca tu progreso con una cuenta de Google.
-          </p>
-
+          <p class="subcopy">Organiza tu enfoque diario y marca tu progreso.</p>
           <div class="tts-row">
             <button
               class="tts-toggle"
@@ -1357,282 +1470,206 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-if="authReady" class="auth-panel">
-          <template v-if="user">
-            <img
-              v-if="user.photoURL"
-              :src="user.photoURL"
-              :alt="user.displayName || 'Usuario'"
-              class="avatar"
-            />
-            <div class="auth-copy">
-              <strong>{{ user.displayName }}</strong>
-              <span>{{ user.email }}</span>
-            </div>
-            <button class="ghost-button" :disabled="loading" @click="handleLogout">
-              Salir
+        <section class="modern-clock">
+          <span class="clock-icon">🕒</span>
+          <div class="clock-info">
+            <span class="clock-label">Hora local</span>
+            <span class="clock-time">{{ relojLocal }}</span>
+            <span v-if="ciudad" class="clock-city">📍 {{ ciudad }}</span>
+          </div>
+        </section>
+
+        <div class="stats-row">
+          <div class="stat-pill"><span>Completadas</span><strong>{{ completedCount }}</strong></div>
+          <div class="stat-pill"><span>Pendientes</span><strong>{{ pendingCount }}</strong></div>
+          <div class="stat-pill"><span>Maximo</span><strong>{{ maxTasks }}</strong></div>
+        </div>
+
+        <div class="input-row">
+          <input v-model="taskInput" class="task-input" type="text" maxlength="120" placeholder="Ejemplo: Esperar confirmacion en zona" @keydown.enter="addTask" />
+          <button class="primary-button" :disabled="tasks.length >= maxTasks" @click="addTask">Agregar</button>
+        </div>
+        <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
+
+        <div class="progress-header">
+          <span>Progreso</span>
+          <strong>{{ progressValue }}%</strong>
+        </div>
+        <div class="progress-track">
+          <div ref="progressFillRef" class="progress-fill"></div>
+        </div>
+
+        <div v-if="tasks.length" class="task-list">
+          <article
+            v-for="(task, index) in tasks"
+            :key="task.id"
+            class="task-card"
+            :class="{
+              complete: task.completed,
+              dragging: dragFromIndex === index,
+              'drag-over': dragOverIndex === index && dragFromIndex !== index,
+            }"
+            draggable="true"
+            @dragstart="onDragStart(index)"
+            @dragenter.prevent="onDragEnter(index)"
+            @dragover.prevent
+            @drop.prevent="onDrop(index)"
+            @dragend="onDragEnd"
+          >
+            <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
+            <button class="toggle-button" :aria-pressed="task.completed" @click="toggleTask(task.id)">
+              <span class="toggle-indicator"></span>
             </button>
-          </template>
-          <button v-else class="google-button" :disabled="loading" @click="handleGoogleLogin">
-            {{ loading ? 'Conectando...' : 'Iniciar sesion con Google' }}
-          </button>
+            <p>{{ task.title }}</p>
+            <button class="remove-button" @click="removeTask(task.id)">×</button>
+          </article>
+        </div>
+        <div v-else class="empty-state">
+          <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
         </div>
       </div>
 
-      <p v-if="authError" class="error-banner">{{ authError }}</p>
-
-
-      <!-- Reloj local moderno y ciudad -->
-      <section class="modern-clock">
-        <span class="clock-icon">🕒</span>
-        <div class="clock-info">
-          <span class="clock-label">Hora local</span>
-          <span class="clock-time">{{ relojLocal }}</span>
-          <span class="clock-city" v-if="ciudad">📍 {{ ciudad }}</span>
+      <!-- ── Diario ── -->
+      <div v-show="activeSection === 'diario'" class="section-view">
+        <div class="section-header">
+          <p class="eyebrow">Diario</p>
+          <h1>Registro de trades</h1>
         </div>
-      </section>
 
-      <div class="stats-row">
-        <div class="stat-pill">
-          <span>Completadas</span>
-          <strong>{{ completedCount }}</strong>
-        </div>
-        <div class="stat-pill">
-          <span>Pendientes</span>
-          <strong>{{ pendingCount }}</strong>
-        </div>
-        <div class="stat-pill">
-          <span>Maximo</span>
-          <strong>{{ maxTasks }}</strong>
-        </div>
-      </div>
-
-      <div class="input-row">
-        <input
-          v-model="taskInput"
-          class="task-input"
-          type="text"
-          maxlength="120"
-          placeholder="Ejemplo: Esperar confirmacion en zona"
-          @keydown.enter="addTask"
-        />
-        <button class="primary-button" :disabled="tasks.length >= maxTasks" @click="addTask">
-          Agregar
-        </button>
-      </div>
-
-      <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
-
-      <div class="progress-header">
-        <span>Progreso</span>
-        <strong>{{ progressValue }}%</strong>
-      </div>
-
-      <div class="progress-track">
-        <div ref="progressFillRef" class="progress-fill"></div>
-      </div>
-
-      <div v-if="tasks.length" class="task-list">
-        <article
-          v-for="(task, index) in tasks"
-          :key="task.id"
-          class="task-card"
-          :class="{
-            complete: task.completed,
-            dragging: dragFromIndex === index,
-            'drag-over': dragOverIndex === index && dragFromIndex !== index,
-          }"
-          draggable="true"
-          @dragstart="onDragStart(index)"
-          @dragenter.prevent="onDragEnter(index)"
-          @dragover.prevent
-          @drop.prevent="onDrop(index)"
-          @dragend="onDragEnd"
-        >
-          <span class="drag-handle" title="Arrastrar para reordenar">⠿</span>
-          <button class="toggle-button" :aria-pressed="task.completed" @click="toggleTask(task.id)">
-            <span class="toggle-indicator"></span>
-          </button>
-          <p>{{ task.title }}</p>
-          <button class="remove-button" @click="removeTask(task.id)">×</button>
-        </article>
-      </div>
-      <div v-else class="empty-state">
-        <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
-      </div>
-
-      <section class="eval-panel">
-
-        <!-- ── Checklist emocional ── -->
-        <div class="filter-section">
-          <div class="filter-section-head">
-            <div>
-              <p class="filter-eyebrow">Checklist Emocional</p>
-              <h2 class="filter-title">Confirma tu estado antes de operar</h2>
-              <p class="filter-copy">{{ emotionalCopy }}</p>
-            </div>
-            <div class="emotional-btns">
-              <button
-                class="emotional-btn"
-                :class="{ 'emotional-btn--calm': emotionalState === 'calmado' }"
-                @click="selectEmotionalState('calmado')"
-              >Estás calmado</button>
-              <button
-                class="emotional-btn"
-                :class="{ 'emotional-btn--anxious': emotionalState === 'ansioso' }"
-                @click="selectEmotionalState('ansioso')"
-              >Estás ansioso</button>
+        <section class="eval-panel">
+          <!-- Checklist emocional -->
+          <div class="filter-section">
+            <div class="filter-section-head">
+              <div>
+                <p class="filter-eyebrow">Checklist Emocional</p>
+                <h2 class="filter-title">Confirma tu estado antes de operar</h2>
+                <p class="filter-copy">{{ emotionalCopy }}</p>
+              </div>
+              <div class="emotional-btns">
+                <button class="emotional-btn" :class="{ 'emotional-btn--calm': emotionalState === 'calmado' }" @click="selectEmotionalState('calmado')">Estás calmado</button>
+                <button class="emotional-btn" :class="{ 'emotional-btn--anxious': emotionalState === 'ansioso' }" @click="selectEmotionalState('ansioso')">Estás ansioso</button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- ── Cumplimiento de reglas ── -->
-        <div class="filter-section">
-          <div class="filter-section-head">
-            <div>
-              <p class="filter-eyebrow">Cumplimiento de Reglas</p>
-              <h2 class="filter-title">{{ complianceTitle }}</h2>
-              <p class="filter-copy">{{ complianceCopy }}</p>
+          <!-- Cumplimiento -->
+          <div class="filter-section">
+            <div class="filter-section-head">
+              <div>
+                <p class="filter-eyebrow">Cumplimiento de Reglas</p>
+                <h2 class="filter-title">{{ complianceTitle }}</h2>
+                <p class="filter-copy">{{ complianceCopy }}</p>
+              </div>
+            </div>
+            <div class="compliance-cards">
+              <button class="compliance-card compliance-card--segui" :class="{ active: tradeCompliance === 'segui' }" @click="selectTradeCompliance('segui')">
+                <strong>Seguí</strong><span>Tarjeta verde</span>
+              </button>
+              <button class="compliance-card compliance-card--parcial" :class="{ active: tradeCompliance === 'parcial' }" @click="selectTradeCompliance('parcial')">
+                <strong>Parcial</strong><span>Tarjeta amarilla</span>
+              </button>
+              <button class="compliance-card compliance-card--fallo" :class="{ active: tradeCompliance === 'fallo' }" @click="selectTradeCompliance('fallo')">
+                <strong>No seguí</strong><span>Tarjeta roja</span>
+              </button>
+            </div>
+            <div class="discipline-row">
+              <span class="discipline-label">Disciplina semanal</span>
+              <span class="discipline-stats">
+                {{ weeklyDisciplinePercent }}% &middot;
+                {{ weeklyStats.segui }} segui +20 &middot;
+                {{ weeklyStats.parcial }} parcial +10 &middot;
+                {{ weeklyStats.fallo }} fallo -20 &middot;
+                {{ weeklyStats.total }} toque(s)
+              </span>
+            </div>
+            <div class="discipline-track">
+              <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
+            </div>
+            <p v-if="isOperationLocked" class="filter-warning">{{ lockoutCopy }}</p>
+            <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
+          </div>
+
+          <!-- R y Objetivo -->
+          <div class="eval-meta-top" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <div class="eval-meta-field">
+              <label for="r-selector" style="font-size: 0.95em; color: #7fa1d2;">Seleccionador de R ($)</label>
+              <input id="r-selector" v-model.number="evalOneR" class="eval-control" type="number" min="1" max="100000" step="1" @change="scheduleEvalSettingsSave" style="width: 120px;" />
+            </div>
+            <div class="eval-meta-field">
+              <label for="objetivo-selector" style="font-size: 0.95em; color: #7fa1d2;">Objetivo ($)</label>
+              <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" style="width: 160px;" />
             </div>
           </div>
-          <div class="compliance-cards">
-            <button
-              class="compliance-card compliance-card--segui"
-              :class="{ active: tradeCompliance === 'segui' }"
-              @click="selectTradeCompliance('segui')"
-            >
-              <strong>Seguí</strong>
-              <span>Tarjeta verde</span>
-            </button>
-            <button
-              class="compliance-card compliance-card--parcial"
-              :class="{ active: tradeCompliance === 'parcial' }"
-              @click="selectTradeCompliance('parcial')"
-            >
-              <strong>Parcial</strong>
-              <span>Tarjeta amarilla</span>
-            </button>
-            <button
-              class="compliance-card compliance-card--fallo"
-              :class="{ active: tradeCompliance === 'fallo' }"
-              @click="selectTradeCompliance('fallo')"
-            >
-              <strong>No seguí</strong>
-              <span>Tarjeta roja</span>
-            </button>
+          <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <span style="font-size: 0.95em; color: #7fa1d2;">Avance objetivo:</span>
+              <strong :style="{ color: evalTotalUSD < 0 ? '#facc15' : '#4ade80' }">${{ evalTotalUSD.toFixed(2) }}</strong>
+              <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
+              <strong :style="{ color: evalRestanUSD > 0 ? '#4ade80' : '#facc15' }">${{ evalRestanUSD.toFixed(2) }}</strong>
+              <span style="font-size: 0.95em; color: #7fa1d2;">Progreso:</span>
+              <strong style="color: #60a5fa;">{{ evalProgress }}%</strong>
+            </div>
+            <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
+              <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80', height: '100%', borderRadius: '8px' }"></div>
+            </div>
           </div>
 
-          <div class="discipline-row">
-            <span class="discipline-label">Disciplina semanal</span>
-            <span class="discipline-stats">
-              {{ weeklyDisciplinePercent }}% &middot;
-              {{ weeklyStats.segui }} segui +20 &middot;
-              {{ weeklyStats.parcial }} parcial +10 &middot;
-              {{ weeklyStats.fallo }} fallo -20 &middot;
-              {{ weeklyStats.total }} toque(s)
-            </span>
+          <!-- Formulario trade -->
+          <div class="eval-journal-top">
+            <input v-model="tradeDate" class="eval-control" type="date" />
+            <select v-model="tradeSession" class="eval-control">
+              <option>Sesion</option>
+              <option>Londres</option>
+              <option>New York AM</option>
+              <option>New York PM</option>
+              <option>Asia</option>
+            </select>
+            <input v-model="tradeInput" class="eval-control" type="text" inputmode="decimal" placeholder="R" @keydown.enter="addTrade" />
+            <input v-model="tradeNote" class="eval-control" type="text" maxlength="140" placeholder="Nota" />
           </div>
-          <div class="discipline-track">
-            <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
+          <div class="eval-journal-actions">
+            <button class="primary-button" :disabled="isOperationLocked" @click="addTrade">Guardar trade</button>
+            <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
           </div>
-          <p v-if="isOperationLocked" class="filter-warning">{{ lockoutCopy }}</p>
-          <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
-        </div>
+          <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
 
-        <div class="eval-meta-top" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-          <div class="eval-meta-field">
-            <label for="r-selector" style="font-size: 0.95em; color: #7fa1d2;">Seleccionador de R ($)</label>
-            <input id="r-selector" v-model.number="evalOneR" class="eval-control" type="number" min="1" max="100000" step="1" @change="scheduleEvalSettingsSave" style="width: 120px;" />
+          <!-- Tabla -->
+          <div class="eval-table-wrap">
+            <table class="eval-table">
+              <thead>
+                <tr>
+                  <th>USD</th><th>R</th><th>Sesion</th><th>Nota</th><th>Fecha</th><th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="!tradesList.length">
+                  <td colspan="6" class="empty-row">Aun no hay trades registrados</td>
+                </tr>
+                <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
+                  <td :class="(trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) > 0 ? 'pos' : ((trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) < 0 ? 'neg' : '')">
+                    <template v-if="typeof trade.rBase === 'number'">
+                      {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
+                    </template>
+                    <template v-else>
+                      <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
+                    </template>
+                  </td>
+                  <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
+                  <td>{{ trade.session || 'Sesion' }}</td>
+                  <td>{{ trade.note || '-' }}</td>
+                  <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
+                  <td><button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div class="eval-meta-field">
-            <label for="objetivo-selector" style="font-size: 0.95em; color: #7fa1d2;">Objetivo ($)</label>
-            <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" style="width: 160px;" />
-          </div>
-        </div>
-        <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
-          <div style="display: flex; align-items: center; gap: 1rem;">
-            <span style="font-size: 0.95em; color: #7fa1d2;">Avance objetivo:</span>
-            <strong :style="{ color: evalTotalUSD < 0 ? '#facc15' : '#4ade80' }">${{ evalTotalUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
-            <strong :style="{ color: evalRestanUSD > 0 ? '#4ade80' : '#facc15' }">${{ evalRestanUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Progreso:</span>
-            <strong style="color: #60a5fa;">{{ evalProgress }}%</strong>
-          </div>
-          <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
-            <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80', height: '100%', borderRadius: '8px' }"></div>
-          </div>
-        </div>
-        <div class="eval-journal-top">
-          <input v-model="tradeDate" class="eval-control" type="date" />
-          <select v-model="tradeSession" class="eval-control">
-            <option>Sesion</option>
-            <option>Londres</option>
-            <option>New York AM</option>
-            <option>New York PM</option>
-            <option>Asia</option>
-          </select>
-          <input
-            v-model="tradeInput"
-            class="eval-control"
-            type="text"
-            inputmode="decimal"
-            placeholder="R"
-            @keydown.enter="addTrade"
-          />
-          <input
-            v-model="tradeNote"
-            class="eval-control"
-            type="text"
-            maxlength="140"
-            placeholder="Nota"
-          />
-        </div>
 
-        <div class="eval-journal-actions">
-          <button class="primary-button" :disabled="isOperationLocked" @click="addTrade">Guardar trade</button>
-          <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
-        </div>
-        <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
+          <PnlChart :trades="tradesList" :one-r="evalOneR" />
+        </section>
+      </div>
 
-        <div class="eval-table-wrap">
-          <table class="eval-table">
-            <thead>
-              <tr>
-                <th>USD</th>
-                <th>R</th>
-                <th>Sesion</th>
-                <th>Nota</th>
-                <th>Fecha</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="!tradesList.length">
-                <td colspan="6" class="empty-row">Aun no hay trades registrados</td>
-              </tr>
-              <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
-                <td :class="(trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) > 0 ? 'pos' : ((trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) < 0 ? 'neg' : '')">
-                  <template v-if="typeof trade.rBase === 'number'">
-                    {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
-                  </template>
-                  <template v-else>
-                    <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
-                  </template>
-                </td>
-                <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
-                <td>{{ trade.session || 'Sesion' }}</td>
-                <td>{{ trade.note || '-' }}</td>
-                <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
-                <td>
-                  <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <PnlChart :trades="tradesList" :one-r="evalOneR" />
-
+      <!-- ── Calendario ── -->
+      <div v-show="activeSection === 'calendario'" class="section-view">
         <div class="eval-calendar-head">
           <div>
             <p class="eval-eyebrow">Performance</p>
@@ -1647,26 +1684,11 @@ onMounted(() => {
         </div>
 
         <div class="eval-main-stats">
-          <div class="eval-stat-card">
-            <span>USD del mes</span>
-            <strong>${{ evalUsdMes.toFixed(2) }}</strong>
-          </div>
-          <div class="eval-stat-card">
-            <span>Trades</span>
-            <strong>{{ evalTradesMes }}</strong>
-          </div>
-          <div class="eval-stat-card">
-            <span>Dias activos</span>
-            <strong>{{ evalDiasActivosMes }}</strong>
-          </div>
-          <div class="eval-stat-card">
-            <span>Dias verdes</span>
-            <strong>{{ evalDiasVerdesMes }}</strong>
-          </div>
-          <div class="eval-stat-card">
-            <span>Win rate</span>
-            <strong>{{ evalWinRateMes }}%</strong>
-          </div>
+          <div class="eval-stat-card"><span>USD del mes</span><strong>${{ evalUsdMes.toFixed(2) }}</strong></div>
+          <div class="eval-stat-card"><span>Trades</span><strong>{{ evalTradesMes }}</strong></div>
+          <div class="eval-stat-card"><span>Dias activos</span><strong>{{ evalDiasActivosMes }}</strong></div>
+          <div class="eval-stat-card"><span>Dias verdes</span><strong>{{ evalDiasVerdesMes }}</strong></div>
+          <div class="eval-stat-card"><span>Win rate</span><strong>{{ evalWinRateMes }}%</strong></div>
         </div>
 
         <div class="calendar-grid-head">
@@ -1689,14 +1711,9 @@ onMounted(() => {
             <div v-if="day.inMonth" class="calendar-cell-content">
               <strong>{{ day.dayNumber }}</strong>
               <small v-if="day.trades">{{ day.trades }} trade{{ day.trades > 1 ? 's' : '' }} realizados</small>
-              <small
-                v-if="day.trades"
-                class="calendar-usd"
-                :class="{ pos: day.usd > 0, neg: day.usd < 0 }"
-              >
+              <small v-if="day.trades" class="calendar-usd" :class="{ pos: day.usd > 0, neg: day.usd < 0 }">
                 {{ day.usd > 0 ? '+' : '' }}${{ day.usd.toFixed(2) }}
               </small>
-
               <div v-if="day.trades" class="calendar-tooltip">
                 <p>Trades del dia</p>
                 <ul>
@@ -1713,7 +1730,6 @@ onMounted(() => {
 
           <aside class="calendar-week-summary">
             <p>Semana {{ weeklySummaries[weekIndex]?.weekNumber || weekIndex + 1 }}</p>
-            
             <span>${{ (weeklySummaries[weekIndex]?.usd || 0).toFixed(2) }}</span>
             <small>{{ weeklySummaries[weekIndex]?.activeDays || 0 }} días activos</small>
             <div style="margin-top: 0.5em; font-size: 1em; color: #60a5fa;">
@@ -1721,85 +1737,118 @@ onMounted(() => {
             </div>
           </aside>
         </div>
-      </section>
+      </div>
 
-      <section class="pomodoro-panel">
-        <div class="pomodoro-head">
-          <div>
-            <p class="pomodoro-eyebrow">Concentracion</p>
-            <h2>Pomodoro editable</h2>
-            <p class="pomodoro-copy">
-              Ajusta tu meta diaria de enfoque y trabaja en bloques pomodoro con descansos automaticos.
-            </p>
-          </div>
-          <div class="pomodoro-badges">
-            <span>{{ phaseBadgeText }}</span>
-          </div>
-        </div>
-
-        <div class="pomodoro-goal-row">
-          <div class="pomodoro-goal-card">
-            <span>Meta diaria (horas)</span>
-            <div class="goal-stepper">
-              <button
-                class="stepper-btn"
-                :disabled="pomodoroGoalHours <= 1"
-                @click="pomodoroGoalHours = Math.max(1, pomodoroGoalHours - 1)"
-              >−</button>
-              <strong class="stepper-value">{{ pomodoroGoalHours }}h</strong>
-              <button
-                class="stepper-btn"
-                :disabled="pomodoroGoalHours >= 24"
-                @click="pomodoroGoalHours = Math.min(24, pomodoroGoalHours + 1)"
-              >+</button>
+      <!-- ── Pomodoro ── -->
+      <div v-show="activeSection === 'pomodoro'" class="section-view">
+        <section class="pomodoro-panel">
+          <div class="pomodoro-head">
+            <div>
+              <p class="pomodoro-eyebrow">Concentracion</p>
+              <h2>Pomodoro editable</h2>
+              <p class="pomodoro-copy">Ajusta tu meta diaria de enfoque y trabaja en bloques pomodoro con descansos automaticos.</p>
+            </div>
+            <div class="pomodoro-badges">
+              <span>{{ phaseBadgeText }}</span>
             </div>
           </div>
-          <div class="pomodoro-goal-card static">
-            <span>Meta actual</span>
-            <strong>{{ currentGoalLabel }}</strong>
+
+          <div class="pomodoro-goal-row">
+            <div class="pomodoro-goal-card">
+              <span>Meta diaria (horas)</span>
+              <div class="goal-stepper">
+                <button class="stepper-btn" :disabled="pomodoroGoalHours <= 1" @click="pomodoroGoalHours = Math.max(1, pomodoroGoalHours - 1)">−</button>
+                <strong class="stepper-value">{{ pomodoroGoalHours }}h</strong>
+                <button class="stepper-btn" :disabled="pomodoroGoalHours >= 24" @click="pomodoroGoalHours = Math.min(24, pomodoroGoalHours + 1)">+</button>
+              </div>
+            </div>
+            <div class="pomodoro-goal-card static">
+              <span>Meta actual</span>
+              <strong>{{ currentGoalLabel }}</strong>
+            </div>
+          </div>
+
+          <div class="pomodoro-timer-card">
+            <span class="phase-pill">{{ phaseLabel }}</span>
+            <strong>{{ clockText }}</strong>
+            <p>{{ pomodoroSyncing ? `Esperando inicio ${pomodoroSyncLabel}` : (pomodoroRunning ? 'En curso' : 'Listo para continuar') }}</p>
+          </div>
+
+          <div class="pomodoro-progress-head">
+            <span>Avance {{ currentGoalLabel }}</span>
+            <strong>{{ focusProgress }}%</strong>
+          </div>
+          <div class="pomodoro-progress-track">
+            <div class="pomodoro-progress-fill" :style="{ width: `${focusProgress}%` }"></div>
+          </div>
+
+          <div class="pomodoro-stats-row">
+            <article class="pomodoro-stat-card"><span>Enfoque acumulado</span><strong>{{ focusAccumulatedLabel }}</strong></article>
+            <article class="pomodoro-stat-card"><span>Tiempo restante</span><strong>{{ remainingFocusLabel }}</strong></article>
+            <article class="pomodoro-stat-card"><span>Bloques cerrados</span><strong>{{ closedBlocks }}</strong></article>
+          </div>
+
+          <div class="pomodoro-actions">
+            <button class="pomodoro-primary" @click="startPomodoro">{{ pomodoroRunning ? 'Corriendo' : 'Iniciar' }}</button>
+            <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
+            <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- ── Noticias ── -->
+      <div v-show="activeSection === 'noticias'" class="section-view">
+        <div class="noticias-panel">
+          <div class="noticias-head">
+            <div>
+              <p class="noticias-eyebrow">ALERTAS</p>
+              <h2 class="noticias-title">Noticias Nasdaq</h2>
+              <p class="noticias-sub">Crea alertas manuales para CPI, Powell, NFP o cualquier evento que quieras vigilar y la app te avisa 15 minutos antes.</p>
+              <p class="noticias-info">Tus recordatorios manuales avisarán por notificación y voz 15 minutos antes.</p>
+              <button class="ghost-button noticias-pause-btn" @click="toggleAlertsPause">
+                {{ alertsPaused ? 'Reanudar alertas' : 'Pausar alertas' }}
+              </button>
+            </div>
+            <div class="noticias-active-badge">
+              <span>Alertas Nasdaq activas</span>
+              <strong>{{ newsAlerts.filter(a => !a.fired).length }}</strong>
+            </div>
+          </div>
+
+          <div class="noticias-form">
+            <input
+              v-model="newAlertText"
+              class="eval-control noticias-input-main"
+              type="text"
+              placeholder="Agregar alerta manual: CPI, Powell, NVIDIA earnings"
+              @keydown.enter="addNewsAlert"
+            />
+            <input v-model="newAlertDate" class="eval-control" type="date" />
+            <input v-model="newAlertTime" class="eval-control" type="time" />
+            <button class="primary-button" @click="addNewsAlert">Agregar alerta</button>
+          </div>
+
+          <div v-if="!newsAlerts.length" class="noticias-empty">
+            No hay alertas cargadas todavía. Agrega tu próximo evento manual y la app te avisará 15 minutos antes.
+          </div>
+          <div v-else class="noticias-list">
+            <div
+              v-for="alert in newsAlerts"
+              :key="alert.id"
+              class="noticias-item"
+              :class="{ 'noticias-item--fired': alert.fired }"
+            >
+              <div class="noticias-item-info">
+                <strong>{{ alert.text }}</strong>
+                <span>{{ alert.date }} · {{ alert.time }}</span>
+              </div>
+              <span v-if="alert.fired" class="noticias-fired-badge">Avisado</span>
+              <button class="eval-remove-btn" @click="removeNewsAlert(alert.id)">×</button>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div class="pomodoro-timer-card">
-          <span class="phase-pill">{{ phaseLabel }}</span>
-          <strong>{{ clockText }}</strong>
-          <p>
-            {{ pomodoroSyncing ? `Esperando inicio ${pomodoroSyncLabel}` : (pomodoroRunning ? 'En curso' : 'Listo para continuar') }}
-          </p>
-        </div>
-
-        <div class="pomodoro-progress-head">
-          <span>Avance {{ currentGoalLabel }}</span>
-          <strong>{{ focusProgress }}%</strong>
-        </div>
-        <div class="pomodoro-progress-track">
-          <div class="pomodoro-progress-fill" :style="{ width: `${focusProgress}%` }"></div>
-        </div>
-
-        <div class="pomodoro-stats-row">
-          <article class="pomodoro-stat-card">
-            <span>Enfoque acumulado</span>
-            <strong>{{ focusAccumulatedLabel }}</strong>
-          </article>
-          <article class="pomodoro-stat-card">
-            <span>Tiempo restante</span>
-            <strong>{{ remainingFocusLabel }}</strong>
-          </article>
-          <article class="pomodoro-stat-card">
-            <span>Bloques cerrados</span>
-            <strong>{{ closedBlocks }}</strong>
-          </article>
-        </div>
-
-        <div class="pomodoro-actions">
-          <button class="pomodoro-primary" @click="startPomodoro">
-            {{ pomodoroRunning ? 'Corriendo' : 'Iniciar' }}
-          </button>
-          <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
-          <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
-        </div>
-      </section>
-
-    </section>
+    </div>
   </main>
 </template>
