@@ -19,6 +19,20 @@ import { auth, db, loginWithGoogle, logout } from './firebase'
 const maxTasks = 10
 const user = ref(null)
 const authReady = ref(false)
+
+// ── Intro / Onboarding ───────────────────────────────────────────
+const showIntro = ref(false)
+
+function openIntro() {
+  showIntro.value = true
+}
+
+function closeIntro() {
+  showIntro.value = false
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nasdaq-mentor-intro-seen', 'true')
+  }
+}
 const loading = ref(false)
 const authError = ref('')
 const taskInput = ref('')
@@ -1293,6 +1307,9 @@ onUnmounted(() => {
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', handlePageHide)
+    if (!localStorage.getItem('nasdaq-mentor-intro-seen')) {
+      showIntro.value = true
+    }
   }
 
   initTts()
@@ -1526,6 +1543,9 @@ function onSyncModeChange() {
 
 <template>
   <main class="page-shell">
+    <!-- Botón para reabrir el intro -->
+    <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
+
     <section class="app-card">
       <div class="hero-row">
         <div>
@@ -2116,4 +2136,78 @@ function onSyncModeChange() {
 
     </section>
   </main>
+
+  <!-- ── Intro Modal ── -->
+  <Transition name="intro-fade">
+    <div v-if="showIntro" class="intro-overlay" @click.self="closeIntro">
+      <div class="intro-modal">
+        <button class="intro-close" @click="closeIntro" aria-label="Cerrar">×</button>
+
+        <div class="intro-logo">📈</div>
+        <h2 class="intro-title">Bienvenido a <span>NasdaqMentor</span></h2>
+        <p class="intro-subtitle">Tu plataforma de disciplina y performance para trading profesional en el Nasdaq.</p>
+
+        <div class="intro-features">
+          <div class="intro-feature">
+            <span class="intro-feature-icon">✅</span>
+            <div>
+              <strong>Checklist del día</strong>
+              <p>Define hasta 10 objetivos diarios y arrastra para reordenarlos. Marca cada tarea como completada y sigue tu progreso en tiempo real.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">🧠</span>
+            <div>
+              <strong>Filtro emocional</strong>
+              <p>Antes de operar, confirma tu estado emocional. Si estás ansioso, la app bloquea la operativa 20 minutos para proteger tu capital.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">📊</span>
+            <div>
+              <strong>Registro de Trades</strong>
+              <p>Ingresa el valor de R de cada operación, la sesión y una nota. La app calcula tu USD ganado/perdido y tu win rate automáticamente.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">📅</span>
+            <div>
+              <strong>Calendario de Performance</strong>
+              <p>Visualiza tu historial mensual de trades día a día. Los días verdes reflejan ganancias, los rojos pérdidas.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">⏱</span>
+            <div>
+              <strong>Pomodoro de Trading</strong>
+              <p>Trabaja en bloques de 25 minutos con descansos automáticos. Establece tu meta de horas de enfoque diario.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">🔔</span>
+            <div>
+              <strong>Alertas Nasdaq</strong>
+              <p>Programa alertas para eventos clave como CPI, NFP o discursos de la Fed. La app te avisa por voz 15 minutos antes.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">🕐</span>
+            <div>
+              <strong>Sincronizador UTC</strong>
+              <p>Mantén tu operativa alineada con los mercados usando el timer UTC sincronizado con los minutos exactos del reloj global.</p>
+            </div>
+          </div>
+          <div class="intro-feature">
+            <span class="intro-feature-icon">☁️</span>
+            <div>
+              <strong>Sincronización en la nube</strong>
+              <p>Inicia sesión con Google para guardar tus tareas y trades automáticamente y acceder desde cualquier dispositivo.</p>
+            </div>
+          </div>
+        </div>
+
+        <button class="intro-cta" @click="closeIntro">Comenzar a usar la app →</button>
+      </div>
+    </div>
+  </Transition>
 </template>
