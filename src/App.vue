@@ -1283,6 +1283,8 @@ onUnmounted(() => {
   stopPomodoro()
   stopTaskSubscription()
   stopEvalSubscription()
+  syncStop()
+  if (syncClockInterval) { clearInterval(syncClockInterval); syncClockInterval = null }
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel()
   }
@@ -1296,6 +1298,8 @@ onMounted(() => {
   initTts()
   startClock()
   loadNewsAlerts()
+  syncUpdateClock()
+  syncClockInterval = setInterval(syncUpdateClock, 250)
 
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
@@ -1391,6 +1395,132 @@ function checkNewsAlerts() {
       persistNewsAlerts()
     }
   })
+}
+
+// ── Sincronizador UTC ─────────────────────────────────────────
+const syncUtcText = ref('')
+const syncDisplay = ref('05:00')
+const syncMode = ref(300)
+const syncRunning = ref(false)
+const syncWaiting = ref(false)
+const syncState = ref('Estado: detenido')
+let syncEndUtcMs = null
+let syncLastSpoken = null
+let syncLastAlarmCycle = null
+let syncLoopTimeout = null
+let syncStartTimeout = null
+let syncClockInterval = null
+
+function syncPad2(n) { return String(n).padStart(2, '0') }
+
+function syncFormatMMSS(sec) {
+  const s = Math.max(0, Math.floor(sec))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${syncPad2(m)}:${syncPad2(r)}`
+}
+
+function syncUpdateClock() {
+  const d = new Date()
+  syncUtcText.value = `UTC ${syncPad2(d.getUTCHours())}:${syncPad2(d.getUTCMinutes())}:${syncPad2(d.getUTCSeconds())}`
+}
+
+function syncAlarm() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.frequency.value = 650
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    gain.gain.value = 0.06
+    osc.start()
+    setTimeout(() => { osc.stop(); ctx.close() }, 800)
+  } catch (e) {}
+}
+
+function syncSpeak(n) {
+  try {
+    window.speechSynthesis.cancel()
+    const u = new SpeechSynthesisUtterance(String(n))
+    u.lang = 'es-ES'
+    window.speechSynthesis.speak(u)
+  } catch (e) {}
+}
+
+function syncNextBoundaryMs(stepSec) {
+  const stepMs = stepSec * 1000
+  const now = Date.now()
+  const next = Math.ceil(now / stepMs) * stepMs
+  return next === now ? now + stepMs : next
+}
+
+function syncDescribeAlignment(stepSec) {
+  if (stepSec === 300) return 'Estado: esperando UTC (min 0/5/10/15... y seg 00)'
+  if (stepSec === 60) return 'Estado: esperando UTC (seg 00)'
+  if (stepSec === 120) return 'Estado: esperando UTC (min par y seg 00)'
+  return 'Estado: esperando alineación UTC'
+}
+
+function syncLoop() {
+  if (!syncRunning.value) return
+  syncUpdateClock()
+  const now = Date.now()
+  const remainingSec = Math.ceil((syncEndUtcMs - now) / 1000)
+  syncDisplay.value = syncFormatMMSS(remainingSec)
+
+  if (remainingSec <= 10 && remainingSec > 0 && syncLastSpoken !== remainingSec) {
+    syncLastSpoken = remainingSec
+    syncSpeak(remainingSec)
+  }
+
+  if (remainingSec <= 0) {
+    const cycleId = syncEndUtcMs
+    if (syncLastAlarmCycle !== cycleId) {
+      syncLastAlarmCycle = cycleId
+      syncAlarm()
+    }
+    syncEndUtcMs = syncEndUtcMs + syncMode.value * 1000
+    syncLastSpoken = null
+  }
+
+  const msToNextSecond = 1000 - (now % 1000)
+  const delay = Math.min(250, Math.max(20, msToNextSecond + 10))
+  syncLoopTimeout = setTimeout(syncLoop, delay)
+}
+
+function syncStart() {
+  syncStop()
+  syncWaiting.value = true
+  syncState.value = syncDescribeAlignment(syncMode.value)
+  const startUtc = syncNextBoundaryMs(syncMode.value)
+  syncEndUtcMs = startUtc + syncMode.value * 1000
+  syncDisplay.value = syncFormatMMSS(syncMode.value)
+  const msWait = startUtc - Date.now()
+  syncStartTimeout = setTimeout(() => {
+    syncWaiting.value = false
+    syncRunning.value = true
+    syncState.value = 'Estado: corriendo'
+    syncLastSpoken = null
+    syncLastAlarmCycle = null
+    syncLoop()
+  }, Math.max(0, msWait))
+}
+
+function syncStop() {
+  syncRunning.value = false
+  syncWaiting.value = false
+  if (syncStartTimeout) { clearTimeout(syncStartTimeout); syncStartTimeout = null }
+  if (syncLoopTimeout) { clearTimeout(syncLoopTimeout); syncLoopTimeout = null }
+  syncState.value = 'Estado: detenido'
+  syncDisplay.value = syncFormatMMSS(syncMode.value)
+  try { window.speechSynthesis.cancel() } catch (e) {}
+}
+
+function onSyncModeChange() {
+  if (!syncRunning.value && !syncWaiting.value) {
+    syncDisplay.value = syncFormatMMSS(syncMode.value)
+  }
 }
 </script>
 
@@ -1896,6 +2026,42 @@ function checkNewsAlerts() {
           <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
           <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
         </div>
+      </section>
+
+      <!-- ── Sincronizador UTC ── -->
+      <section class="sync-panel">
+        <div class="sync-head">
+          <div>
+            <p class="sync-eyebrow">SINCRONIZADOR</p>
+            <h2 class="sync-title">Timer UTC</h2>
+          </div>
+          <span class="sync-utc-badge">{{ syncUtcText }}</span>
+        </div>
+
+        <div class="sync-display-wrap">
+          <span class="sync-display">{{ syncDisplay }}</span>
+        </div>
+
+        <div class="sync-controls">
+          <select v-model.number="syncMode" class="eval-control sync-select" @change="onSyncModeChange">
+            <option :value="20">20 segundos</option>
+            <option :value="60">1 minuto</option>
+            <option :value="120">2 minutos</option>
+            <option :value="300">5 minutos</option>
+          </select>
+          <button
+            class="primary-button sync-btn-start"
+            :disabled="syncRunning || syncWaiting"
+            @click="syncStart"
+          >
+            Start
+          </button>
+          <button class="ghost-button" @click="syncStop">Stop</button>
+        </div>
+
+        <p class="sync-state" :class="{ 'sync-state--running': syncRunning, 'sync-state--waiting': syncWaiting }">
+          {{ syncState }}
+        </p>
       </section>
 
       <!-- ── Noticias / Alertas ── -->
