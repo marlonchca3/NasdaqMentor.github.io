@@ -129,22 +129,66 @@ const PAD_R = 12
 const PAD_T = 16
 const PAD_B = 28
 
-// Sorted trades oldest → newest
-const points = computed(() => {
-  return [...props.trades]
-    .sort((a, b) => {
-      const ta = (a.tradeDate instanceof Date ? a.tradeDate : new Date(a.tradeDate || a.createdAt))?.getTime() ?? 0
-      const tb = (b.tradeDate instanceof Date ? b.tradeDate : new Date(b.tradeDate || b.createdAt))?.getTime() ?? 0
+function toMs(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.getTime()
+  }
+
+  if (typeof value?.toDate === 'function') {
+    const d = value.toDate()
+    return Number.isNaN(d.getTime()) ? null : d.getTime()
+  }
+
+  if (typeof value?.seconds === 'number') {
+    return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1000000)
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    return Number.isNaN(parsed) ? null : parsed
+  }
+
+  return null
+}
+
+// Orden cronologico real: prioriza createdAt (momento guardado), con fallback a tradeDate.
+const sortedTrades = computed(() => {
+  return [...props.trades].sort((a, b) => {
+    const aCreatedAt = toMs(a.createdAt)
+    const bCreatedAt = toMs(b.createdAt)
+    const aTradeDate = toMs(a.tradeDate)
+    const bTradeDate = toMs(b.tradeDate)
+    const ta = aCreatedAt ?? aTradeDate ?? 0
+    const tb = bCreatedAt ?? bTradeDate ?? 0
+
+    if (ta !== tb) {
       return ta - tb
-    })
-    .map((t, i, arr) => {
+    }
+
+    // Desempate estable para mantener orden consistente.
+    return String(a.id || '').localeCompare(String(b.id || ''))
+  })
+})
+
+const points = computed(() => {
+  return sortedTrades.value.map((t, i, arr) => {
       const rBase = typeof t.rBase === 'number' ? t.rBase : props.oneR
       const usd = t.r * rBase
       const cumulative = arr.slice(0, i + 1).reduce((sum, tt) => {
         const rb = typeof tt.rBase === 'number' ? tt.rBase : props.oneR
         return sum + tt.r * rb
       }, 0)
-      return { usd, cumulative }
+      const createdAtMs = toMs(t.createdAt)
+      const tradeDateMs = toMs(t.tradeDate)
+      return {
+        usd,
+        cumulative,
+        labelTime: createdAtMs ?? tradeDateMs,
+      }
     })
 })
 
@@ -224,14 +268,10 @@ const xLabels = computed(() => {
   const labels = []
   for (let i = step - 1; i < n; i += step) {
     const p = points.value[i]
-    // get trade date label
-    const trade = [...props.trades].sort((a, b) => {
-      const ta = (a.tradeDate instanceof Date ? a.tradeDate : new Date(a.tradeDate || a.createdAt))?.getTime() ?? 0
-      const tb = (b.tradeDate instanceof Date ? b.tradeDate : new Date(b.tradeDate || b.createdAt))?.getTime() ?? 0
-      return ta - tb
-    })[i]
-    const d = trade?.tradeDate instanceof Date ? trade.tradeDate : new Date(trade?.tradeDate || trade?.createdAt)
-    const text = d && !isNaN(d) ? `${d.getDate()}/${d.getMonth() + 1}` : `#${i + 1}`
+    const d = p?.labelTime ? new Date(p.labelTime) : null
+    const text = d && !Number.isNaN(d.getTime())
+      ? `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      : `#${i + 1}`
     labels.push({ x: toX(i + 1), text })
   }
   return labels
