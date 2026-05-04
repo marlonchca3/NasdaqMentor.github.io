@@ -1427,11 +1427,27 @@ function checkNewsAlerts() {
             </button>
             <a
               class="velas-btn"
+              href="https://marlonchca3.github.io/trading.github.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🕯️ Ejercicios de Velas 1
+            </a>
+            <a
+              class="velas-btn"
+              href="https://marlonchca3.github.io/trading1.github.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🕯️ Ejercicios de Velas 2
+            </a>
+            <a
+              class="velas-btn"
               href="https://marlonchca3.github.io/trading2.github.io/"
               target="_blank"
               rel="noopener noreferrer"
             >
-              🕯️ Ejercicio de Velas 3
+              🕯️ Ejercicios de Velas 3
             </a>
           </div>
         </div>
