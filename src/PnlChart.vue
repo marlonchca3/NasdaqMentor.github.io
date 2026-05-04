@@ -157,7 +157,9 @@ function toMs(value) {
 
 // Orden cronologico real: prioriza createdAt (momento guardado), con fallback a tradeDate.
 const sortedTrades = computed(() => {
-  return [...props.trades].sort((a, b) => {
+  return props.trades
+    .map((trade, index) => ({ ...trade, __sourceIndex: index }))
+    .sort((a, b) => {
     const aCreatedAt = toMs(a.createdAt)
     const bCreatedAt = toMs(b.createdAt)
     const aTradeDate = toMs(a.tradeDate)
@@ -169,8 +171,8 @@ const sortedTrades = computed(() => {
       return ta - tb
     }
 
-    // Desempate estable para mantener orden consistente.
-    return String(a.id || '').localeCompare(String(b.id || ''))
+    // Desempate estable: conservar orden de llegada en la lista original.
+    return a.__sourceIndex - b.__sourceIndex
   })
 })
 
@@ -194,7 +196,7 @@ const points = computed(() => {
 
 const totalUSD = computed(() => points.value.length ? points.value[points.value.length - 1].cumulative : 0)
 
-// All cumulative values including 0 at start
+// Valores del chart: P&L acumulado + 0 para referencia.
 const allValues = computed(() => [0, ...points.value.map((p) => p.cumulative)])
 
 const minVal = computed(() => Math.min(...allValues.value))
@@ -203,6 +205,16 @@ const maxVal = computed(() => Math.max(...allValues.value))
 const range = computed(() => {
   const r = maxVal.value - minVal.value
   return r === 0 ? 1 : r
+})
+
+const timeRange = computed(() => {
+  const timeValues = points.value.map((p) => p.labelTime).filter((v) => Number.isFinite(v))
+  if (!timeValues.length) {
+    return { min: 0, max: 0, span: 1 }
+  }
+  const min = Math.min(...timeValues)
+  const max = Math.max(...timeValues)
+  return { min, max, span: Math.max(max - min, 1) }
 })
 
 function toY(val) {
@@ -216,18 +228,32 @@ function toX(i) {
   return PAD_L + (i / total) * chartW
 }
 
+function toXFromTime(timeMs, i) {
+  const chartW = W - PAD_L - PAD_R
+  const { min, span } = timeRange.value
+
+  if (!Number.isFinite(timeMs)) {
+    return toX(i)
+  }
+
+  return PAD_L + ((timeMs - min) / span) * chartW
+}
+
 const zeroY = computed(() => toY(0))
 
 const plotPoints = computed(() => {
-  // index 0 = origin (0 USD), index i+1 = after trade i
+  // Cada punto representa el P&L acumulado en su hora de guardado.
   return points.value.map((p, i) => ({
-    x: toX(i + 1),
+    x: toXFromTime(p.labelTime, i + 1),
     y: toY(p.cumulative),
   }))
 })
 
 const allPlotPoints = computed(() => [
-  { x: toX(0), y: toY(0) },
+  {
+    x: plotPoints.value.length ? plotPoints.value[0].x : toX(0),
+    y: toY(0),
+  },
   ...plotPoints.value,
 ])
 
@@ -264,15 +290,24 @@ const gridLines = computed(() => {
 const xLabels = computed(() => {
   const n = points.value.length
   if (n === 0) return []
+
+  const dayKeys = new Set(
+    points.value
+      .map((p) => (p?.labelTime ? new Date(p.labelTime) : null))
+      .filter((d) => d && !Number.isNaN(d.getTime()))
+      .map((d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`),
+  )
+  const showDate = dayKeys.size > 1
+
   const step = Math.ceil(n / 6)
   const labels = []
   for (let i = step - 1; i < n; i += step) {
     const p = points.value[i]
     const d = p?.labelTime ? new Date(p.labelTime) : null
     const text = d && !Number.isNaN(d.getTime())
-      ? `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+      ? `${showDate ? `${d.getDate()}/${d.getMonth() + 1} ` : ''}${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
       : `#${i + 1}`
-    labels.push({ x: toX(i + 1), text })
+    labels.push({ x: toXFromTime(p?.labelTime, i + 1), text })
   }
   return labels
 })
