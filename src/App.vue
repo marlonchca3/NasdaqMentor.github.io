@@ -516,6 +516,13 @@ function formatDateCell(date) {
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
 }
 
+function formatTimeFromDate(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return ''
+  }
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
 function normalizeDate(value) {
   if (typeof value === 'string') {
     const localDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -1418,6 +1425,14 @@ function checkNewsAlerts() {
             >
               {{ ttsReady ? 'Probar ahora' : 'Cargando...' }}
             </button>
+            <a
+              class="velas-btn"
+              href="https://marlonchca3.github.io/trading2.github.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🕯️ Ejercicio de Velas 3
+            </a>
           </div>
         </div>
 
@@ -1686,7 +1701,10 @@ function checkNewsAlerts() {
                 <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
                 <td>{{ trade.session || 'Sesion' }}</td>
                 <td>{{ trade.note || '-' }}</td>
-                <td>{{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}</td>
+                <td>
+                  {{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}
+                  <span v-if="normalizeDate(trade.createdAt)" style="display:block;font-size:0.8em;opacity:0.6;">{{ formatTimeFromDate(normalizeDate(trade.createdAt)) }}</span>
+                </td>
                 <td>
                   <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
                 </td>
