@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { gsap } from 'gsap'
 import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
+import ProspectTest from './ProspectTest.vue'
 import {
   addDoc,
   collection,
@@ -2133,6 +2134,9 @@ function onSyncModeChange() {
           </div>
         </div>
       </section>
+
+      <!-- ── Teoría Prospectiva ── -->
+      <ProspectTest />
 
     </section>
   </main>
