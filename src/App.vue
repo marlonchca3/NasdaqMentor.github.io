@@ -1542,7 +1542,7 @@ function onSyncModeChange() {
 }
 
 // ── Sidebar ──────────────────────────────────────────────────────
-const sidebarOpen = ref(true)
+const sidebarOpen = ref(false)
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -1562,6 +1562,29 @@ function scrollToSection(id) {
 
 <template>
   <div class="app-layout">
+    <!-- Top Navbar -->
+    <header class="topnav">
+      <button class="nav-hamburger" :title="sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'" @click="toggleSidebar">☰</button>
+      <span class="nav-brand">📈 NasdaqMentor</span>
+
+      <!-- Auth section -->
+      <div v-if="authReady" class="nav-auth">
+        <template v-if="user">
+          <img
+            v-if="user.photoURL"
+            :src="user.photoURL"
+            :alt="user.displayName || 'Usuario'"
+            class="nav-avatar"
+          />
+          <span class="nav-username">{{ user.displayName }}</span>
+          <button class="nav-logout" :disabled="loading" @click="handleLogout">Salir</button>
+        </template>
+        <button v-else class="nav-login" :disabled="loading" @click="handleGoogleLogin">
+          {{ loading ? 'Conectando...' : 'Iniciar sesión' }}
+        </button>
+      </div>
+    </header>
+
     <!-- Sidebar -->
     <nav class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
       <div class="sidebar-brand">📈 NasdaqMentor</div>
@@ -1613,13 +1636,6 @@ function scrollToSection(id) {
 
     <!-- Main content -->
     <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
-      <!-- Sidebar toggle button -->
-      <button
-        class="sidebar-toggle"
-        :title="sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'"
-        @click="toggleSidebar"
-      >☰</button>
-
       <!-- Botón para reabrir el intro -->
       <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
 
@@ -1679,26 +1695,6 @@ function scrollToSection(id) {
           </div>
         </div>
 
-        <div v-if="authReady" class="auth-panel">
-          <template v-if="user">
-            <img
-              v-if="user.photoURL"
-              :src="user.photoURL"
-              :alt="user.displayName || 'Usuario'"
-              class="avatar"
-            />
-            <div class="auth-copy">
-              <strong>{{ user.displayName }}</strong>
-              <span>{{ user.email }}</span>
-            </div>
-            <button class="ghost-button" :disabled="loading" @click="handleLogout">
-              Salir
-            </button>
-          </template>
-          <button v-else class="google-button" :disabled="loading" @click="handleGoogleLogin">
-            {{ loading ? 'Conectando...' : 'Iniciar sesion con Google' }}
-          </button>
-        </div>
       </div>
 
       <p v-if="authError" class="error-banner">{{ authError }}</p>
