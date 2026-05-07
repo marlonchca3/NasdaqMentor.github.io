@@ -1634,6 +1634,9 @@ function scrollToSection(id) {
       </ul>
     </nav>
 
+    <!-- Mobile overlay to close sidebar -->
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false"></div>
+
     <!-- Main content -->
     <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
       <!-- Botón para reabrir el intro -->

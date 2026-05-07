@@ -224,18 +224,90 @@
   margin-left: 240px;
 }
 
-/* Overlay for mobile when sidebar is open */
+/* ── Mobile overlay (tap to close sidebar) ─────────────────── */
+.sidebar-overlay {
+  display: none;
+}
+
 @media (max-width: 767px) {
+  /* Sidebar floats over content on mobile */
   .main-area--shifted {
     margin-left: 0;
   }
 
-  .sidebar--open::after {
-    content: '';
+  /* Overlay visible on mobile when sidebar open */
+  .sidebar-overlay {
+    display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: -1;
+    background: rgba(0, 0, 0, 0.52);
+    z-index: 190;
+  }
+
+  /* Navbar: reduce padding, shrink brand */
+  .topnav {
+    padding: 0 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .nav-brand {
+    font-size: 0.88rem;
+  }
+
+  /* App card: tighter padding */
+  .app-card {
+    padding: 16px 14px;
+  }
+
+  /* Hero row stacks vertically */
+  .hero-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* TTS row wraps */
+  .tts-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .velas-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .topnav {
+    height: 50px;
+    padding: 0 0.6rem;
+  }
+
+  .main-area {
+    padding-top: calc(50px + 0.75rem);
+  }
+
+  .sidebar {
+    top: 50px;
+    height: calc(100vh - 50px);
+  }
+
+  .nav-brand {
+    display: none;
+  }
+
+  .nav-hamburger {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+
+  .app-card {
+    padding: 12px 10px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
   }
 }
 
@@ -483,6 +555,11 @@ button {
   justify-content: space-between;
   gap: 20px;
   align-items: flex-start;
+}
+
+.hero-row > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .eyebrow {
@@ -999,6 +1076,7 @@ h1 {
   gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .tts-toggle,
