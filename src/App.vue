@@ -1540,15 +1540,91 @@ function onSyncModeChange() {
     syncDisplay.value = syncFormatMMSS(syncMode.value)
   }
 }
+
+// ── Sidebar ──────────────────────────────────────────────────────
+const sidebarOpen = ref(true)
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+}
+
+function scrollToSection(id) {
+  const el = document.getElementById(id)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  // On mobile, close sidebar after clicking a menu item
+  if (window.innerWidth < 768) {
+    sidebarOpen.value = false
+  }
+}
 </script>
 
 <template>
-  <main class="page-shell">
-    <!-- Botón para reabrir el intro -->
-    <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
+      <div class="sidebar-brand">📈 NasdaqMentor</div>
+      <ul class="sidebar-menu">
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('checklist')">
+            <span class="sidebar-icon">✅</span>
+            <span class="sidebar-label">Tareas del día</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('reloj')">
+            <span class="sidebar-icon">🕒</span>
+            <span class="sidebar-label">Reloj local</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('evaluacion')">
+            <span class="sidebar-icon">📊</span>
+            <span class="sidebar-label">Evaluación</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('pomodoro')">
+            <span class="sidebar-icon">⏱</span>
+            <span class="sidebar-label">Pomodoro</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('sincronizador')">
+            <span class="sidebar-icon">🔄</span>
+            <span class="sidebar-label">Timer UTC</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('noticias')">
+            <span class="sidebar-icon">🔔</span>
+            <span class="sidebar-label">Alertas Nasdaq</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" @click="scrollToSection('prospectiva')">
+            <span class="sidebar-icon">🧪</span>
+            <span class="sidebar-label">Prospectiva</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
+      <!-- Sidebar toggle button -->
+      <button
+        class="sidebar-toggle"
+        :title="sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'"
+        @click="toggleSidebar"
+      >☰</button>
+
+      <!-- Botón para reabrir el intro -->
+      <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
 
     <section class="app-card">
-      <div class="hero-row">
+      <div id="checklist" class="hero-row">
         <div>
           <p class="eyebrow">Checklist</p>
           <h1>Tareas del dia</h1>
@@ -1629,7 +1705,7 @@ function onSyncModeChange() {
 
 
       <!-- Reloj local moderno y ciudad -->
-      <section class="modern-clock">
+      <section id="reloj" class="modern-clock">
         <span class="clock-icon">🕒</span>
         <div class="clock-info">
           <span class="clock-label">Hora local</span>
@@ -1707,7 +1783,7 @@ function onSyncModeChange() {
         <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
       </div>
 
-      <section class="eval-panel">
+      <section id="evaluacion" class="eval-panel">
 
         <!-- ── Checklist emocional ── -->
         <div class="filter-section">
@@ -1972,7 +2048,7 @@ function onSyncModeChange() {
         </div>
       </section>
 
-      <section class="pomodoro-panel">
+      <section id="pomodoro" class="pomodoro-panel">
         <div class="pomodoro-head">
           <div>
             <p class="pomodoro-eyebrow">Concentracion</p>
@@ -2050,7 +2126,7 @@ function onSyncModeChange() {
       </section>
 
       <!-- ── Sincronizador UTC ── -->
-      <section class="sync-panel">
+      <section id="sincronizador" class="sync-panel">
         <div class="sync-head">
           <div>
             <p class="sync-eyebrow">SINCRONIZADOR</p>
@@ -2086,7 +2162,7 @@ function onSyncModeChange() {
       </section>
 
       <!-- ── Noticias / Alertas ── -->
-      <section class="noticias-panel">
+      <section id="noticias" class="noticias-panel">
         <div class="noticias-head">
           <div class="noticias-head-left">
             <p class="noticias-eyebrow">ALERTAS</p>
@@ -2136,10 +2212,11 @@ function onSyncModeChange() {
       </section>
 
       <!-- ── Teoría Prospectiva ── -->
-      <ProspectTest />
+      <div id="prospectiva"><ProspectTest /></div>
 
     </section>
-  </main>
+    </main>
+  </div>
 
   <!-- ── Intro Modal ── -->
   <Transition name="intro-fade">

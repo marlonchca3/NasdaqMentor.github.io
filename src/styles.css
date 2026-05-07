@@ -1,3 +1,149 @@
+/* ── App Layout (sidebar + main) ──────────────────────────── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 240px;
+  background: linear-gradient(180deg, rgba(8, 15, 30, 0.98) 0%, rgba(14, 25, 50, 0.98) 100%);
+  border-right: 1.5px solid rgba(96, 165, 250, 0.18);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+}
+
+.sidebar--open {
+  transform: translateX(0);
+}
+
+.sidebar-brand {
+  padding: 1.4rem 1.25rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #60a5fa;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.12);
+  user-select: none;
+}
+
+.sidebar-menu {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  flex: 1;
+}
+
+.sidebar-menu li {
+  margin: 0;
+}
+
+.sidebar-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.72rem 1.25rem;
+  background: transparent;
+  border: none;
+  color: #94b4d8;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: rgba(96, 165, 250, 0.09);
+  color: #edf4ff;
+  border-left-color: #60a5fa;
+}
+
+.sidebar-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.sidebar-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Sidebar toggle button ─────────────────────────────────── */
+.sidebar-toggle {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 300;
+  width: 40px;
+  height: 40px;
+  background: rgba(14, 25, 50, 0.92);
+  border: 1.5px solid rgba(96, 165, 250, 0.25);
+  border-radius: 10px;
+  color: #60a5fa;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+
+.sidebar-toggle:hover {
+  background: rgba(96, 165, 250, 0.15);
+  border-color: #60a5fa;
+  color: #edf4ff;
+}
+
+/* ── Main area shift when sidebar open ─────────────────────── */
+.main-area {
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: 0;
+  flex: 1;
+  min-width: 0;
+  padding-top: 1rem;
+}
+
+.main-area--shifted {
+  margin-left: 240px;
+}
+
+/* Overlay for mobile when sidebar is open */
+@media (max-width: 767px) {
+  .main-area--shifted {
+    margin-left: 0;
+  }
+
+  .sidebar--open::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+  }
+}
+
+/* Adjust intro-help-btn to not overlap toggle */
+.intro-help-btn {
+  right: 1rem !important;
+  left: auto !important;
+}
+
 /* ── Sincronizador UTC ─────────────────────────────────────── */
 .sync-panel {
   margin: 2rem 0 1.5rem;
