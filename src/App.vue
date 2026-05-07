@@ -1542,7 +1542,7 @@ function onSyncModeChange() {
 }
 
 // ── Sidebar ──────────────────────────────────────────────────────
-const sidebarOpen = ref(true)
+const sidebarOpen = ref(false)
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -1564,62 +1564,66 @@ function scrollToSection(id) {
   <div class="app-layout">
     <!-- Sidebar -->
     <nav class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
-      <div class="sidebar-brand">📈 NasdaqMentor</div>
+      <div class="sidebar-brand" :title="sidebarOpen ? 'NasdaqMentor' : ''">
+        <span class="sidebar-brand-icon">📈</span>
+        <span v-if="sidebarOpen" class="sidebar-brand-text">NasdaqMentor</span>
+      </div>
       <ul class="sidebar-menu">
         <li>
-          <button class="sidebar-item" @click="scrollToSection('checklist')">
+          <button class="sidebar-item" title="Checklist" @click="scrollToSection('checklist')">
             <span class="sidebar-icon">✅</span>
             <span class="sidebar-label">Tareas del día</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('reloj')">
+          <button class="sidebar-item" title="Reloj local" @click="scrollToSection('reloj')">
             <span class="sidebar-icon">🕒</span>
             <span class="sidebar-label">Reloj local</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('evaluacion')">
+          <button class="sidebar-item" title="Evaluación" @click="scrollToSection('evaluacion')">
             <span class="sidebar-icon">📊</span>
             <span class="sidebar-label">Evaluación</span>
           </button>
         </li>
+        <li class="sidebar-divider" aria-hidden="true"></li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('pomodoro')">
+          <button class="sidebar-item" title="Pomodoro" @click="scrollToSection('pomodoro')">
             <span class="sidebar-icon">⏱</span>
             <span class="sidebar-label">Pomodoro</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('sincronizador')">
+          <button class="sidebar-item" title="Timer UTC" @click="scrollToSection('sincronizador')">
             <span class="sidebar-icon">🔄</span>
             <span class="sidebar-label">Timer UTC</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('noticias')">
+          <button class="sidebar-item" title="Alertas Nasdaq" @click="scrollToSection('noticias')">
             <span class="sidebar-icon">🔔</span>
             <span class="sidebar-label">Alertas Nasdaq</span>
           </button>
         </li>
+        <li class="sidebar-divider" aria-hidden="true"></li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('prospectiva')">
+          <button class="sidebar-item" title="Prospectiva" @click="scrollToSection('prospectiva')">
             <span class="sidebar-icon">🧪</span>
             <span class="sidebar-label">Prospectiva</span>
           </button>
         </li>
       </ul>
+
+      <button
+        class="sidebar-toggle"
+        :title="sidebarOpen ? 'Contraer menú' : 'Expandir menú'"
+        @click="toggleSidebar"
+      >{{ sidebarOpen ? '‹' : '›' }}</button>
     </nav>
 
     <!-- Main content -->
     <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
-      <!-- Sidebar toggle button -->
-      <button
-        class="sidebar-toggle"
-        :title="sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'"
-        @click="toggleSidebar"
-      >☰</button>
-
       <!-- Botón para reabrir el intro -->
       <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
 
