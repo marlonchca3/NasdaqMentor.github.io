@@ -298,6 +298,18 @@ const remainingFocusLabel = computed(() => {
   return `${hours}h ${String(minutes).padStart(2, '0')}m`
 })
 
+function sendPomodoroNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, { body, icon: '/favicon.ico' })
+  }
+}
+
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
 function moveToNextPhase({ countCompletedFocus }) {
   if (pomodoroPhase.value === 'focus') {
     if (countCompletedFocus) {
@@ -308,16 +320,28 @@ function moveToNextPhase({ countCompletedFocus }) {
     if (closedBlocks.value > 0 && closedBlocks.value % 4 === 0) {
       pomodoroPhase.value = 'longBreak'
       pomodoroTimeLeft.value = getPhaseSeconds('longBreak')
+      if (countCompletedFocus) {
+        speak(`¡Excelente! Completaste 4 bloques de concentración. Toma un descanso largo de ${longBreakMinutes} minutos.`)
+        sendPomodoroNotification('¡Descanso largo! 🎉', `Completaste 4 bloques. Descansa ${longBreakMinutes} minutos.`)
+      }
       return false
     }
 
     pomodoroPhase.value = 'shortBreak'
     pomodoroTimeLeft.value = getPhaseSeconds('shortBreak')
+    if (countCompletedFocus) {
+      speak(`¡Muy bien! Terminaron los 25 minutos. Es hora de descansar ${shortBreakMinutes} minutos.`)
+      sendPomodoroNotification('¡Hora de descansar! ⏰', `Terminaron los 25 minutos. Descansa ${shortBreakMinutes} minutos.`)
+    }
     return false
   }
 
   pomodoroPhase.value = 'focus'
   pomodoroTimeLeft.value = getPhaseSeconds('focus')
+  if (countCompletedFocus) {
+    speak('¡Descanso terminado! Volvemos a concentración por 25 minutos.')
+    sendPomodoroNotification('¡A concentrarse! 🎯', 'El descanso terminó. Comienza un nuevo bloque de 25 minutos.')
+  }
   return true
 }
 
@@ -408,6 +432,7 @@ function startPomodoro() {
     return
   }
 
+  requestNotificationPermission()
   pomodoroRunning.value = true
 
   if (pomodoroPhase.value === 'focus') {
