@@ -98,13 +98,34 @@ if (typeof window !== 'undefined') {
 const ttsSpeaking = ref(false)
 
 const ttsReady = ref(false)
+const ttsUnlocked = ref(false)
+let ttsVoicesChangedHandler = null
 let clockInterval = null
 const cooldownNow = ref(Date.now())
+
+function unlockTts() {
+  if (!('speechSynthesis' in window) || ttsUnlocked.value) {
+    return
+  }
+
+  try {
+    const warmup = new SpeechSynthesisUtterance('')
+    warmup.volume = 0
+    window.speechSynthesis.speak(warmup)
+    window.speechSynthesis.cancel()
+    ttsUnlocked.value = true
+  } catch {
+    // Keep locked; user can try again on next interaction.
+  }
+}
 
 function toggleTts() {
   ttsEnabled.value = !ttsEnabled.value
   if (typeof window !== 'undefined') {
     localStorage.setItem('ttsEnabled', ttsEnabled.value)
+    if (ttsEnabled.value) {
+      unlockTts()
+    }
     if (!ttsEnabled.value && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel()
       ttsSpeaking.value = false
@@ -126,6 +147,8 @@ function speak(text) {
     return
   }
 
+  unlockTts()
+  window.speechSynthesis.resume()
   window.speechSynthesis.cancel()
 
   const utterance = new SpeechSynthesisUtterance(text)
@@ -136,6 +159,7 @@ function speak(text) {
   }
 
   utterance.lang = 'es-ES'
+  utterance.volume = 1
   utterance.rate = 0.95
   utterance.onstart = () => { ttsSpeaking.value = true }
   utterance.onend = () => { ttsSpeaking.value = false }
@@ -198,6 +222,7 @@ function stopClock() {
 
 function speakNow() {
   if (ttsEnabled.value) {
+    unlockTts()
     speak(buildSpeechText())
   }
 }
@@ -207,6 +232,9 @@ function initTts() {
     return
   }
 
+  // Some browsers return [] for voices initially; do not block TTS UI.
+  ttsReady.value = true
+
   const tryInit = () => {
     const voices = window.speechSynthesis.getVoices()
     if (voices.length > 0) {
@@ -215,7 +243,8 @@ function initTts() {
   }
 
   tryInit()
-  window.speechSynthesis.onvoiceschanged = tryInit
+  ttsVoicesChangedHandler = tryInit
+  window.speechSynthesis.addEventListener('voiceschanged', ttsVoicesChangedHandler)
 }
 
 const progressFillRef = ref(null)
@@ -1327,6 +1356,10 @@ onUnmounted(() => {
   if (syncClockInterval) { clearInterval(syncClockInterval); syncClockInterval = null }
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel()
+    if (ttsVoicesChangedHandler) {
+      window.speechSynthesis.removeEventListener('voiceschanged', ttsVoicesChangedHandler)
+      ttsVoicesChangedHandler = null
+    }
   }
 })
 
@@ -1339,6 +1372,7 @@ onMounted(() => {
   }
 
   initTts()
+  window.addEventListener('pointerdown', unlockTts, { once: true })
   startClock()
   loadNewsAlerts()
   syncUpdateClock()
@@ -1690,11 +1724,11 @@ function scrollToSection(id) {
             </button>
             <button
               class="tts-preview"
-              :disabled="!tasks.length || !ttsReady"
-              :title="!ttsReady ? 'Cargando voces...' : 'Hablar ahora'"
+              :disabled="!ttsEnabled"
+              :title="ttsEnabled ? 'Hablar ahora' : 'Activa la voz primero'"
               @click="speakNow"
             >
-              {{ ttsReady ? 'Probar ahora' : 'Cargando...' }}
+              Probar ahora
             </button>
             <a
               class="velas-btn"
