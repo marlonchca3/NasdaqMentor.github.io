@@ -1690,6 +1690,12 @@ function scrollToSection(id) {
             <span class="sidebar-label">Prospectiva</span>
           </button>
         </li>
+        <li>
+          <a class="sidebar-item" href="https://drive.google.com/drive/folders/1tdZns9hj3OIGzw7JsYeJbsOao210fr6v?usp=sharing" target="_blank" rel="noopener noreferrer">
+            <span class="sidebar-icon">📚</span>
+            <span class="sidebar-label">Libros</span>
+          </a>
+        </li>
       </ul>
     </nav>
 
