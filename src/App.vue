@@ -37,6 +37,7 @@ function closeIntro() {
 const loading = ref(false)
 const authError = ref('')
 const taskInput = ref('')
+const taskError = ref('')
 const tasks = ref([])
 let unsubscribeTasks = null
 
@@ -1218,6 +1219,14 @@ async function addTask() {
     return
   }
 
+  const wordCount = title.split(/\s+/).filter(Boolean).length
+  if (wordCount > 12) {
+    taskError.value = 'Cada tarea puede tener maximo 12 palabras.'
+    return
+  }
+
+  taskError.value = ''
+
   if (user.value) {
     const batch = writeBatch(db)
     const newRef = doc(collection(db, 'users', user.value.uid, 'tasks'))
@@ -1312,6 +1321,12 @@ watch(tasks, () => {
     persistTasks()
   }
 }, { deep: true })
+
+watch(taskInput, () => {
+  if (taskError.value) {
+    taskError.value = ''
+  }
+})
 
 watch(progressValue, (newVal) => {
   if (progressFillRef.value) {
@@ -1808,6 +1823,8 @@ function scrollToSection(id) {
       </div>
 
       <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
+      <p class="helper-text">Cada tarea debe tener maximo 12 palabras.</p>
+      <p v-if="taskError" class="error-banner" style="margin-top: 0.5rem;">{{ taskError }}</p>
 
       <div class="progress-header">
         <span>Progreso</span>
