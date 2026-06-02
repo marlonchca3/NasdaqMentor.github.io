@@ -2358,3 +2358,199 @@ h1 {
   }
 }
 
+.nav-theme-toggle {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.1);
+  color: #dbeafe;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.nav-theme-toggle:hover {
+  transform: translateY(-1px);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.42);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-top: #fff3dd;
+  --bg-bottom: #ffd4a2;
+  --panel: rgba(255, 246, 231, 0.9);
+  --panel-border: rgba(166, 83, 29, 0.24);
+  --text-main: #2e1306;
+  --text-soft: #7a4a2e;
+  --accent-blue: #cb4e15;
+  --accent-cyan: #e9771e;
+  --accent-green: #1d7f4d;
+  --danger-bg: rgba(175, 32, 32, 0.12);
+  --danger-text: #9e1d1d;
+  --shadow: 0 20px 48px rgba(122, 57, 18, 0.2);
+}
+
+:root[data-theme='light'] body {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 157, 58, 0.26), transparent 34%),
+    radial-gradient(circle at 86% 12%, rgba(222, 72, 25, 0.22), transparent 30%),
+    radial-gradient(circle at 55% 100%, rgba(255, 209, 143, 0.35), transparent 42%),
+    repeating-linear-gradient(105deg, rgba(146, 76, 35, 0.03) 0 2px, transparent 2px 8px),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
+
+:root[data-theme='light'] .topnav {
+  background: rgba(255, 241, 220, 0.97);
+  border-bottom-color: rgba(166, 83, 29, 0.24);
+  box-shadow: 0 2px 14px rgba(122, 57, 18, 0.16);
+}
+
+:root[data-theme='light'] .nav-hamburger {
+  color: #b24112;
+  border-color: rgba(178, 65, 18, 0.33);
+}
+
+:root[data-theme='light'] .nav-hamburger:hover {
+  background: rgba(178, 65, 18, 0.14);
+  color: #6e260d;
+}
+
+:root[data-theme='light'] .nav-brand {
+  color: #8f2f0f;
+}
+
+:root[data-theme='light'] .nav-username {
+  color: #6c3b22;
+}
+
+:root[data-theme='light'] .nav-logout {
+  color: #6e2c11;
+  border-color: rgba(178, 65, 18, 0.33);
+}
+
+:root[data-theme='light'] .nav-logout:hover {
+  color: #4c1906;
+  background: rgba(178, 65, 18, 0.14);
+}
+
+:root[data-theme='light'] .nav-theme-toggle {
+  color: #6e2c11;
+  background: rgba(178, 65, 18, 0.11);
+  border-color: rgba(178, 65, 18, 0.3);
+}
+
+:root[data-theme='light'] .sidebar {
+  background: linear-gradient(180deg, rgba(255, 241, 219, 0.99) 0%, rgba(255, 223, 183, 0.98) 100%);
+  border-right-color: rgba(166, 83, 29, 0.24);
+  box-shadow: 4px 0 24px rgba(122, 57, 18, 0.16);
+}
+
+:root[data-theme='light'] .sidebar-brand {
+  color: #8f2f0f;
+  border-bottom-color: rgba(166, 83, 29, 0.2);
+}
+
+:root[data-theme='light'] .sidebar-item {
+  color: #6c3b22;
+}
+
+:root[data-theme='light'] .sidebar-item:hover {
+  color: #5a2208;
+  background: rgba(178, 65, 18, 0.11);
+  border-left-color: #cb4e15;
+}
+
+:root[data-theme='light'] .sidebar-overlay {
+  background: rgba(86, 39, 16, 0.28);
+}
+
+:root[data-theme='light'] .task-input,
+:root[data-theme='light'] .eval-control,
+:root[data-theme='light'] .calendar-month-label,
+:root[data-theme='light'] .calendar-grid-head span,
+:root[data-theme='light'] .calendar-week-summary,
+:root[data-theme='light'] .calendar-cell,
+:root[data-theme='light'] .eval-table-wrap,
+:root[data-theme='light'] .eval-stat-card,
+:root[data-theme='light'] .noticias-head,
+:root[data-theme='light'] .noticias-form,
+:root[data-theme='light'] .noticias-item,
+:root[data-theme='light'] .sync-panel,
+:root[data-theme='light'] .pomodoro-panel,
+:root[data-theme='light'] .eval-panel,
+:root[data-theme='light'] .intro-modal,
+:root[data-theme='light'] .intro-feature {
+  background: rgba(255, 248, 236, 0.9);
+  border-color: rgba(166, 83, 29, 0.22);
+  color: var(--text-main);
+}
+
+:root[data-theme='light'] .calendar-cell.empty {
+  background: rgba(255, 233, 203, 0.68);
+}
+
+:root[data-theme='light'] .stat-pill,
+:root[data-theme='light'] .task-card,
+:root[data-theme='light'] .modern-clock {
+  background: rgba(255, 243, 223, 0.95);
+  border-color: rgba(166, 83, 29, 0.22);
+}
+
+:root[data-theme='light'] .sync-title,
+:root[data-theme='light'] .clock-time,
+:root[data-theme='light'] .filter-title,
+:root[data-theme='light'] .noticias-title,
+:root[data-theme='light'] .intro-title,
+:root[data-theme='light'] .intro-feature strong,
+:root[data-theme='light'] .eval-stat-card strong,
+:root[data-theme='light'] .app-card h1 {
+  color: #2e1306;
+}
+
+:root[data-theme='light'] .intro-subtitle,
+:root[data-theme='light'] .intro-feature p,
+:root[data-theme='light'] .sync-state,
+:root[data-theme='light'] .noticias-item-info span,
+:root[data-theme='light'] .calendar-week-summary span,
+:root[data-theme='light'] .calendar-week-summary small {
+  color: #7a4a2e;
+}
+
+:root[data-theme='light'] .sync-display {
+  color: #5a2208;
+  text-shadow: 0 0 36px rgba(214, 98, 21, 0.28), 0 2px 10px rgba(107, 44, 13, 0.25);
+}
+
+:root[data-theme='light'] .primary-button,
+:root[data-theme='light'] .nav-login,
+:root[data-theme='light'] .intro-cta,
+:root[data-theme='light'] .pomodoro-primary {
+  background: linear-gradient(135deg, #b63f13, #eb721c);
+  color: #fff7ee;
+  box-shadow: 0 6px 18px rgba(182, 63, 19, 0.28);
+}
+
+:root[data-theme='light'] .ghost-button,
+:root[data-theme='light'] .pomodoro-secondary,
+:root[data-theme='light'] .calendar-nav,
+:root[data-theme='light'] .calendar-today {
+  background: rgba(185, 83, 29, 0.12);
+  color: #66260d;
+  border: 1px solid rgba(166, 83, 29, 0.28);
+}
+
+:root[data-theme='light'] .velas-btn {
+  color: #7a2d10;
+  background: rgba(255, 166, 48, 0.16);
+  border-color: rgba(176, 78, 22, 0.35);
+}
+
+:root[data-theme='light'] .velas-btn:hover {
+  background: rgba(255, 166, 48, 0.25);
+  border-color: rgba(176, 78, 22, 0.52);
+}
+
+

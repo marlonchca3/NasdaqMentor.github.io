@@ -20,6 +20,36 @@ import { auth, db, loginWithGoogle, logout } from './firebase'
 const maxTasks = 10
 const user = ref(null)
 const authReady = ref(false)
+const themeStorageKey = 'nasdaq-mentor-theme'
+const theme = ref('dark')
+
+function applyTheme(nextTheme) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.documentElement.setAttribute('data-theme', nextTheme)
+}
+
+function initTheme() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const savedTheme = localStorage.getItem(themeStorageKey)
+  if (savedTheme === 'light' || savedTheme === 'dark') {
+    theme.value = savedTheme
+  } else {
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    theme.value = prefersDark ? 'dark' : 'light'
+  }
+
+  applyTheme(theme.value)
+}
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
+}
 
 // ── Intro / Onboarding ───────────────────────────────────────────
 const showIntro = ref(false)
@@ -1357,6 +1387,13 @@ watch([evalOneR, evalObjetivo], () => {
   scheduleEvalSettingsSave()
 })
 
+watch(theme, (newTheme) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(themeStorageKey, newTheme)
+  }
+  applyTheme(newTheme)
+})
+
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('pagehide', handlePageHide)
@@ -1379,6 +1416,8 @@ onUnmounted(() => {
 })
 
 onMounted(() => {
+  initTheme()
+
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', handlePageHide)
     if (!localStorage.getItem('nasdaq-mentor-intro-seen')) {
@@ -1640,6 +1679,13 @@ function scrollToSection(id) {
     <header class="topnav">
       <button class="nav-hamburger" :title="sidebarOpen ? 'Ocultar menú' : 'Mostrar menú'" @click="toggleSidebar">☰</button>
       <span class="nav-brand">📈 NasdaqMentor</span>
+      <button
+        class="nav-theme-toggle"
+        :title="theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+        @click="toggleTheme"
+      >
+        {{ theme === 'dark' ? '☀️ Claro' : '🌙 Oscuro' }}
+      </button>
 
       <!-- Auth section -->
       <div v-if="authReady" class="nav-auth">
