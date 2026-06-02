@@ -208,6 +208,47 @@
   text-overflow: ellipsis;
 }
 
+.sidebar-caret {
+  margin-left: auto;
+  font-size: 0.88rem;
+  color: rgba(148, 180, 216, 0.8);
+  transition: transform 0.18s ease;
+}
+
+.sidebar-caret--open {
+  transform: rotate(180deg);
+}
+
+.sidebar-submenu {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.25rem;
+}
+
+.sidebar-subitem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.58rem 1.25rem 0.58rem 2.35rem;
+  background: transparent;
+  border: none;
+  color: #87a8d1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+}
+
+.sidebar-subitem:hover {
+  background: rgba(96, 165, 250, 0.08);
+  color: #edf4ff;
+  border-left-color: #60a5fa;
+}
+
 /* ── Sidebar toggle button ─────────────────────────────────── */
 /* (moved into topnav as .nav-hamburger) */
 
@@ -2460,6 +2501,20 @@ h1 {
 :root[data-theme='light'] .sidebar-item:hover {
   color: #5a2208;
   background: rgba(178, 65, 18, 0.11);
+  border-left-color: #cb4e15;
+}
+
+:root[data-theme='light'] .sidebar-caret {
+  color: rgba(108, 59, 34, 0.75);
+}
+
+:root[data-theme='light'] .sidebar-subitem {
+  color: #6c3b22;
+}
+
+:root[data-theme='light'] .sidebar-subitem:hover {
+  color: #5a2208;
+  background: rgba(178, 65, 18, 0.1);
   border-left-color: #cb4e15;
 }
 

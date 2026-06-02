@@ -1656,9 +1656,16 @@ function onSyncModeChange() {
 
 // ── Sidebar ──────────────────────────────────────────────────────
 const sidebarOpen = ref(false)
+const ejerciciosOpen = ref(false)
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
+}
+
+function closeSidebarOnMobile() {
+  if (window.innerWidth < 768) {
+    sidebarOpen.value = false
+  }
 }
 
 function scrollToSection(id) {
@@ -1666,10 +1673,7 @@ function scrollToSection(id) {
   if (el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
-  // On mobile, close sidebar after clicking a menu item
-  if (window.innerWidth < 768) {
-    sidebarOpen.value = false
-  }
+  closeSidebarOnMobile()
 }
 </script>
 
@@ -1746,10 +1750,71 @@ function scrollToSection(id) {
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('prospectiva')">
-            <span class="sidebar-icon">🧪</span>
-            <span class="sidebar-label">Prospectiva</span>
+          <button
+            class="sidebar-item"
+            :aria-expanded="ejerciciosOpen"
+            @click="ejerciciosOpen = !ejerciciosOpen"
+          >
+            <span class="sidebar-icon">🗂️</span>
+            <span class="sidebar-label">Ejercicios</span>
+            <span class="sidebar-caret" :class="{ 'sidebar-caret--open': ejerciciosOpen }">▾</span>
           </button>
+          <ul v-if="ejerciciosOpen" class="sidebar-submenu">
+            <li>
+              <button class="sidebar-subitem" @click="scrollToSection('prospectiva')">
+                <span class="sidebar-icon">🧪</span>
+                <span class="sidebar-label">Prospectiva</span>
+              </button>
+            </li>
+            <li>
+              <a
+                class="sidebar-subitem"
+                href="https://marlonchca3.github.io/trading.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="closeSidebarOnMobile"
+              >
+                <span class="sidebar-icon">🕯️</span>
+                <span class="sidebar-label">Velas 1</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar-subitem"
+                href="https://marlonchca3.github.io/trading1.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="closeSidebarOnMobile"
+              >
+                <span class="sidebar-icon">🕯️</span>
+                <span class="sidebar-label">Velas 2</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar-subitem"
+                href="https://marlonchca3.github.io/trading2.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="closeSidebarOnMobile"
+              >
+                <span class="sidebar-icon">🕯️</span>
+                <span class="sidebar-label">Velas 3</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="sidebar-subitem"
+                href="https://marlonchca3.github.io/trading4.github.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="closeSidebarOnMobile"
+              >
+                <span class="sidebar-icon">🕯️</span>
+                <span class="sidebar-label">Velas 4</span>
+              </a>
+            </li>
+          </ul>
         </li>
         <li>
           <a class="sidebar-item" href="https://drive.google.com/drive/folders/1tdZns9hj3OIGzw7JsYeJbsOao210fr6v?usp=sharing" target="_blank" rel="noopener noreferrer">
@@ -1797,38 +1862,6 @@ function scrollToSection(id) {
             >
               Probar ahora
             </button>
-            <a
-              class="velas-btn"
-              href="https://marlonchca3.github.io/trading.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🕯️ Ejercicios de Velas 1
-            </a>
-            <a
-              class="velas-btn"
-              href="https://marlonchca3.github.io/trading1.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🕯️ Ejercicios de Velas 2
-            </a>
-            <a
-              class="velas-btn"
-              href="https://marlonchca3.github.io/trading2.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🕯️ Ejercicios de Velas 3
-            </a>
-            <a
-              class="velas-btn"
-              href="https://marlonchca3.github.io/trading4.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              🕯️ Ejercicios de velas 4
-            </a>
           </div>
         </div>
 
