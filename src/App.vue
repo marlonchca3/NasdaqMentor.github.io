@@ -1775,6 +1775,14 @@ function scrollToSection(id) {
             >
               🕯️ Ejercicios de Velas 3
             </a>
+            <a
+              class="velas-btn"
+              href="https://marlonchca3.github.io/trading4.github.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              🕯️ Ejercicios de velas 4
+            </a>
           </div>
         </div>
 
