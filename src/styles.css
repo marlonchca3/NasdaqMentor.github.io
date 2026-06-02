@@ -2574,6 +2574,95 @@ h1 {
   color: #7a4a2e;
 }
 
+:root[data-theme='light'] .eyebrow,
+:root[data-theme='light'] .clock-label,
+:root[data-theme='light'] .clock-city,
+:root[data-theme='light'] .helper-text,
+:root[data-theme='light'] .subcopy,
+:root[data-theme='light'] .pomodoro-copy,
+:root[data-theme='light'] .filter-copy,
+:root[data-theme='light'] .discipline-label,
+:root[data-theme='light'] .discipline-stats,
+:root[data-theme='light'] .eval-eyebrow,
+:root[data-theme='light'] .noticias-eyebrow,
+:root[data-theme='light'] .noticias-sub,
+:root[data-theme='light'] .noticias-info,
+:root[data-theme='light'] .sync-eyebrow,
+:root[data-theme='light'] .sync-utc-badge,
+:root[data-theme='light'] .calendar-grid-head span,
+:root[data-theme='light'] .eval-table th,
+:root[data-theme='light'] .eval-table .empty-row {
+  color: #7a4a2e;
+}
+
+:root[data-theme='light'] .task-card p,
+:root[data-theme='light'] .stat-pill span,
+:root[data-theme='light'] .auth-copy span,
+:root[data-theme='light'] .phase-pill,
+:root[data-theme='light'] .pomodoro-timer-card p,
+:root[data-theme='light'] .pomodoro-progress-head,
+:root[data-theme='light'] .pomodoro-goal-card span,
+:root[data-theme='light'] .pomodoro-stat-card span,
+:root[data-theme='light'] .calendar-cell-content small,
+:root[data-theme='light'] .calendar-week-summary p,
+:root[data-theme='light'] .compliance-card span,
+:root[data-theme='light'] .filter-warning {
+  color: #6f3d24;
+}
+
+:root[data-theme='light'] .task-input::placeholder,
+:root[data-theme='light'] .eval-control::placeholder {
+  color: #9b6242;
+}
+
+:root[data-theme='light'] .calendar-month-label,
+:root[data-theme='light'] .calendar-cell-content strong,
+:root[data-theme='light'] .noticias-item-info strong,
+:root[data-theme='light'] .compliance-card strong,
+:root[data-theme='light'] .pomodoro-head h2,
+:root[data-theme='light'] .eval-title,
+:root[data-theme='light'] .stepper-value,
+:root[data-theme='light'] .pomodoro-stat-card strong,
+:root[data-theme='light'] .stat-pill strong,
+:root[data-theme='light'] .phase-pill,
+:root[data-theme='light'] .task-card.complete p {
+  color: #2e1306;
+}
+
+:root[data-theme='light'] .eval-table td {
+  color: #4c250f;
+}
+
+:root[data-theme='light'] .calendar-nav,
+:root[data-theme='light'] .calendar-today,
+:root[data-theme='light'] .google-button,
+:root[data-theme='light'] .tts-toggle,
+:root[data-theme='light'] .tts-preview,
+:root[data-theme='light'] .toggle-button,
+:root[data-theme='light'] .remove-button,
+:root[data-theme='light'] .eval-remove-btn {
+  color: #66260d;
+}
+
+:root[data-theme='light'] .sync-state--running {
+  color: #1f7a44;
+}
+
+:root[data-theme='light'] .sync-state--waiting {
+  color: #9a5a00;
+}
+
+:root[data-theme='light'] .calendar-tooltip {
+  background: rgba(255, 248, 236, 0.98);
+  border-color: rgba(166, 83, 29, 0.3);
+}
+
+:root[data-theme='light'] .calendar-tooltip p,
+:root[data-theme='light'] .calendar-tooltip li,
+:root[data-theme='light'] .calendar-tooltip strong {
+  color: #4c250f;
+}
+
 :root[data-theme='light'] .sync-display {
   color: #5a2208;
   text-shadow: 0 0 36px rgba(214, 98, 21, 0.28), 0 2px 10px rgba(107, 44, 13, 0.25);
