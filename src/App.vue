@@ -133,6 +133,8 @@ const ttsUnlocked = ref(false)
 let ttsVoicesChangedHandler = null
 let clockInterval = null
 const cooldownNow = ref(Date.now())
+const importantNewsMuteTasksUntil = ref(0)
+const importantNewsWindowMinutes = 15
 
 function unlockTts() {
   if (!('speechSynthesis' in window) || ttsUnlocked.value) {
@@ -223,6 +225,47 @@ function buildSpeechText() {
   return parts.join(' ')
 }
 
+function getAlertDateTime(alert) {
+  const [yr, mo, dy] = String(alert.date || '').split('-').map(Number)
+  const [hh, mm] = String(alert.time || '').split(':').map(Number)
+
+  if (![yr, mo, dy, hh, mm].every(Number.isFinite)) {
+    return null
+  }
+
+  return new Date(yr, mo - 1, dy, hh, mm, 0, 0)
+}
+
+function hasImportantNewsNow() {
+  if (alertsPaused.value) {
+    return false
+  }
+
+  const nowMs = Date.now()
+  if (nowMs < importantNewsMuteTasksUntil.value) {
+    return true
+  }
+
+  return newsAlerts.value.some((alert) => {
+    if (alert.fired) {
+      return false
+    }
+
+    const alertTime = getAlertDateTime(alert)
+    if (!alertTime) {
+      return false
+    }
+
+    const diffMin = (alertTime.getTime() - nowMs) / 60000
+    return diffMin >= 0 && diffMin <= importantNewsWindowMinutes
+  })
+}
+
+function buildImportantNewsSpeech(text) {
+  const message = `Atencion, noticia importante: ${text}.`
+  return `${message} ${message} ${message}`
+}
+
 function startClock() {
   clockInterval = setInterval(() => {
     cooldownNow.value = Date.now()
@@ -239,6 +282,9 @@ function startClock() {
 
     const now = new Date()
     if (now.getSeconds() === 0 && now.getMinutes() % 5 === 0) {
+      if (hasImportantNewsNow()) {
+        return
+      }
       speak(buildSpeechText())
     }
   }, 1000)
@@ -1516,13 +1562,18 @@ function checkNewsAlerts() {
   const now = new Date()
   newsAlerts.value.forEach((alert) => {
     if (alert.fired) return
-    const [yr, mo, dy] = alert.date.split('-').map(Number)
-    const [hh, mm] = alert.time.split(':').map(Number)
-    const alertTime = new Date(yr, mo - 1, dy, hh, mm, 0, 0)
+
+    const alertTime = getAlertDateTime(alert)
+    if (!alertTime) return
+
     const diffMin = (alertTime.getTime() - now.getTime()) / 60000
-    if (diffMin <= 15 && diffMin > 14) {
+    if (diffMin <= 15 && diffMin >= 0) {
       alert.fired = true
-      speak(`Alerta: ${alert.text} en 15 minutos.`)
+      importantNewsMuteTasksUntil.value = Math.max(
+        importantNewsMuteTasksUntil.value,
+        alertTime.getTime() + (2 * 60 * 1000),
+      )
+      speak(buildImportantNewsSpeech(alert.text))
       persistNewsAlerts()
     }
   })
