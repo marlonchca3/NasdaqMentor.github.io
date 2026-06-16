@@ -1939,6 +1939,7 @@ function onSyncModeChange() {
 // ── Sidebar ──────────────────────────────────────────────────────
 const sidebarOpen = ref(false)
 const ejerciciosOpen = ref(false)
+const activeSection = ref('checklist')
 
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -1950,11 +1951,13 @@ function closeSidebarOnMobile() {
   }
 }
 
-function scrollToSection(id) {
-  const el = document.getElementById(id)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function openSection(id) {
+  activeSection.value = id
+
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
   closeSidebarOnMobile()
 }
 </script>
@@ -1996,37 +1999,31 @@ function scrollToSection(id) {
       <div class="sidebar-brand">📈 NasdaqMentor</div>
       <ul class="sidebar-menu">
         <li>
-          <button class="sidebar-item" @click="scrollToSection('checklist')">
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'checklist' }" @click="openSection('checklist')">
             <span class="sidebar-icon">✅</span>
             <span class="sidebar-label">Tareas del día</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('reloj')">
-            <span class="sidebar-icon">🕒</span>
-            <span class="sidebar-label">Reloj local</span>
-          </button>
-        </li>
-        <li>
-          <button class="sidebar-item" @click="scrollToSection('evaluacion')">
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openSection('evaluacion')">
             <span class="sidebar-icon">📊</span>
             <span class="sidebar-label">Evaluación</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('pomodoro')">
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'pomodoro' }" @click="openSection('pomodoro')">
             <span class="sidebar-icon">⏱</span>
             <span class="sidebar-label">Pomodoro</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('sincronizador')">
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'sincronizador' }" @click="openSection('sincronizador')">
             <span class="sidebar-icon">🔄</span>
             <span class="sidebar-label">Timer UTC</span>
           </button>
         </li>
         <li>
-          <button class="sidebar-item" @click="scrollToSection('noticias')">
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'noticias' }" @click="openSection('noticias')">
             <span class="sidebar-icon">🔔</span>
             <span class="sidebar-label">Alertas Nasdaq</span>
           </button>
@@ -2043,7 +2040,7 @@ function scrollToSection(id) {
           </button>
           <ul v-if="ejerciciosOpen" class="sidebar-submenu">
             <li>
-              <button class="sidebar-subitem" @click="scrollToSection('prospectiva')">
+              <button class="sidebar-subitem" :class="{ 'sidebar-subitem--active': activeSection === 'prospectiva' }" @click="openSection('prospectiva')">
                 <span class="sidebar-icon">🧪</span>
                 <span class="sidebar-label">Prospectiva</span>
               </button>
@@ -2112,10 +2109,23 @@ function scrollToSection(id) {
 
     <!-- Main content -->
     <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
-      <!-- Botón para reabrir el intro -->
-      <button class="intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
+      <div class="floating-actions">
+        <button
+          class="floating-circle-btn floating-mute-btn"
+          :class="{ 'floating-mute-btn--active': ttsEnabled }"
+          :title="ttsEnabled ? 'Silenciar voz' : 'Activar voz'"
+          @click="toggleTts()"
+        >
+          <span v-if="ttsSpeaking">🔊</span>
+          <span v-else-if="ttsEnabled">🔔</span>
+          <span v-else>🔕</span>
+        </button>
+
+        <button class="floating-circle-btn intro-help-btn" title="¿Cómo funciona la app?" @click="openIntro">?</button>
+      </div>
 
     <section class="app-card">
+      <section v-show="activeSection === 'checklist'">
       <div id="checklist" class="hero-row">
         <div>
           <p class="eyebrow">Checklist</p>
@@ -2124,27 +2134,6 @@ function scrollToSection(id) {
             Organiza tu enfoque diario y marca tu progreso con una cuenta de Google.
           </p>
 
-          <div class="tts-row">
-            <button
-              class="tts-toggle"
-              :class="{ active: ttsEnabled }"
-              :title="ttsEnabled ? 'Desactivar voz' : 'Activar voz'"
-              @click="toggleTts()"
-            >
-              <span v-if="ttsSpeaking" class="tts-icon">🔊</span>
-              <span v-else-if="ttsEnabled" class="tts-icon">🔔</span>
-              <span v-else class="tts-icon">🔕</span>
-              {{ ttsEnabled ? 'Voz activada' : 'Voz desactivada' }}
-            </button>
-            <button
-              class="tts-preview"
-              :disabled="!ttsEnabled"
-              :title="ttsEnabled ? 'Hablar ahora' : 'Activa la voz primero'"
-              @click="speakNow"
-            >
-              Probar ahora
-            </button>
-          </div>
         </div>
 
       </div>
@@ -2232,8 +2221,9 @@ function scrollToSection(id) {
       <div v-else class="empty-state">
         <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
       </div>
+      </section>
 
-      <section id="evaluacion" class="eval-panel">
+      <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">
 
         <!-- ── Checklist emocional ── -->
         <div class="filter-section">
@@ -2517,7 +2507,7 @@ function scrollToSection(id) {
         </div>
       </section>
 
-      <section id="pomodoro" class="pomodoro-panel">
+      <section v-show="activeSection === 'pomodoro'" id="pomodoro" class="pomodoro-panel">
         <div class="pomodoro-head">
           <div>
             <p class="pomodoro-eyebrow">Concentracion</p>
@@ -2595,7 +2585,7 @@ function scrollToSection(id) {
       </section>
 
       <!-- ── Sincronizador UTC ── -->
-      <section id="sincronizador" class="sync-panel">
+      <section v-show="activeSection === 'sincronizador'" id="sincronizador" class="sync-panel">
         <div class="sync-head">
           <div>
             <p class="sync-eyebrow">SINCRONIZADOR</p>
@@ -2631,7 +2621,7 @@ function scrollToSection(id) {
       </section>
 
       <!-- ── Noticias / Alertas ── -->
-      <section id="noticias" class="noticias-panel">
+      <section v-show="activeSection === 'noticias'" id="noticias" class="noticias-panel">
         <div class="noticias-head">
           <div class="noticias-head-left">
             <p class="noticias-eyebrow">ALERTAS</p>
@@ -2681,7 +2671,7 @@ function scrollToSection(id) {
       </section>
 
       <!-- ── Teoría Prospectiva ── -->
-      <div id="prospectiva"><ProspectTest /></div>
+      <div v-show="activeSection === 'prospectiva'" id="prospectiva"><ProspectTest /></div>
 
     </section>
     </main>
