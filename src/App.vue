@@ -9,6 +9,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocsFromServer,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -635,7 +636,21 @@ onUnmounted(() => {
 
 const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
+const maxDailyLossUSD = ref(15)
 const tradesList = ref([])
+const pendingTrades = ref([])
+const savingTrade = ref(false)
+const riskDebug = ref({
+  source: 'idle',
+  checkedAt: '',
+  currentSessionUsd: 0,
+  currentLossUsedUSD: 0,
+  maxDailyLossUSD: 0,
+  blocked: false,
+  pendingCount: 0,
+  serverCount: 0,
+  lockMessage: '',
+})
 const tradeInput = ref('')
 const tradeError = ref('')
 const tradeDate = ref(formatDateForInput(new Date()))
@@ -904,16 +919,87 @@ const evalProgress = computed(() => {
   if (!evalObjetivo.value) return 0
   return Math.min(100, Math.round((evalTotalUSD.value / evalObjetivo.value) * 100))
 })
+
+const riskResetUtcHour = 0
+
+function getRiskSessionStart(referenceMs = Date.now()) {
+  const now = new Date(referenceMs)
+  const start = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    riskResetUtcHour,
+    0,
+    0,
+    0,
+  ))
+
+  if (referenceMs < start.getTime()) {
+    start.setUTCDate(start.getUTCDate() - 1)
+  }
+
+  return start
+}
+
+function getNextRiskReset(referenceMs = Date.now()) {
+  const next = getRiskSessionStart(referenceMs)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next
+}
+
+function formatCountdownTo(targetMs, nowMs) {
+  const diff = Math.max(0, targetMs - nowMs)
+  const totalMinutes = Math.ceil(diff / 60000)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function getTradeTimestamp(trade) {
+  return normalizeDate(trade.createdAt || trade.tradeDate)
+}
+
+function isTradeInCurrentRiskSession(trade, nowMs = cooldownNow.value) {
+  const nzStartMs = getRiskSessionStart(nowMs).getTime()
+  const d = getTradeTimestamp(trade)
+  if (!d) return false
+  return d.getTime() >= nzStartMs
+}
+
+function getTradeUsdAmount(trade) {
+  return trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)
+}
+
 const evalTradesToday = computed(() => {
-  const todayStr = new Date().toDateString()
-  return tradesList.value.filter((t) => {
-    const d = normalizeDate(t.tradeDate || t.createdAt)
-    if (!d) return false
-    return d.toDateString() === todayStr
+  const nowMs = cooldownNow.value
+  const riskTrades = [...pendingTrades.value, ...tradesList.value]
+  const seenClientIds = new Set()
+  const uniqueRiskTrades = riskTrades.filter((trade) => {
+    if (!trade.clientId) return true
+    if (seenClientIds.has(trade.clientId)) return false
+    seenClientIds.add(trade.clientId)
+    return true
   })
+
+  return uniqueRiskTrades.filter((t) => isTradeInCurrentRiskSession(t, nowMs))
 })
 const evalTradesHoy = computed(() => evalTradesToday.value.length)
 const evalRHoy = computed(() => evalTradesToday.value.reduce((sum, t) => sum + t.r, 0))
+const evalUsdHoy = computed(() =>
+  evalTradesToday.value.reduce(
+    (sum, trade) => sum + (trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)),
+    0,
+  ),
+)
+const dailyLossUsedUSD = computed(() => Math.max(0, -evalUsdHoy.value))
+const dailyLossRemainingUSD = computed(() => Math.max(maxDailyLossUSD.value - dailyLossUsedUSD.value, 0))
+const dailyLossProgress = computed(() => {
+  if (!maxDailyLossUSD.value) return 0
+  return Math.min(100, Math.round((dailyLossUsedUSD.value / maxDailyLossUSD.value) * 100))
+})
+const dailyLossLimitReached = computed(() =>
+  maxDailyLossUSD.value > 0 && dailyLossUsedUSD.value >= maxDailyLossUSD.value,
+)
 const evalWinRate = computed(() => {
   if (!tradesList.value.length) return 0
   return Math.round((tradesList.value.filter((t) => t.r > 0).length / tradesList.value.length) * 100)
@@ -934,7 +1020,7 @@ const operationLockRemainingMs = computed(() =>
   Math.max(0, operationLockUntil.value - cooldownNow.value),
 )
 
-const isOperationLocked = computed(() => operationLockRemainingMs.value > 0)
+const isOperationLocked = computed(() => operationLockRemainingMs.value > 0 || dailyLossLimitReached.value)
 
 const operationLockCountdown = computed(() => {
   if (!isOperationLocked.value) {
@@ -1011,6 +1097,21 @@ const weeklyDisciplinePercent = computed(() =>
   Math.max(0, Math.min(100, weeklyDisciplineScore.value)),
 )
 
+function getOperationLockMessage() {
+  if (operationLockRemainingMs.value > 0) {
+    return `Operativa bloqueada. Espera ${operationLockCountdown.value} antes de guardar otro trade.`
+  }
+
+  if (dailyLossLimitReached.value) {
+    const nowMs = cooldownNow.value
+    const nextReset = getNextRiskReset(nowMs)
+    const waitText = formatCountdownTo(nextReset.getTime(), nowMs)
+    return `Operativa pausada por pérdida diaria máxima: llevas -$${dailyLossUsedUSD.value.toFixed(2)} de $${maxDailyLossUSD.value.toFixed(2)}. Se habilita al reinicio diario de riesgo (00:00 UTC), en ${waitText}.`
+  }
+
+  return ''
+}
+
 const complianceTitle = computed(() => {
   if (tradeCompliance.value === 'segui') return 'Seguí'
   if (tradeCompliance.value === 'parcial') return 'Parcial'
@@ -1036,11 +1137,7 @@ const emotionalCopy = computed(() => {
 })
 
 const lockoutCopy = computed(() => {
-  if (!isOperationLocked.value) {
-    return ''
-  }
-
-  return `Operativa bloqueada temporalmente. Tiempo restante: ${operationLockCountdown.value}.`
+  return getOperationLockMessage()
 })
 
 const guestEvalKey = 'nasdaq-mentor-guest-eval'
@@ -1053,6 +1150,13 @@ function loadEval() {
       const parsed = JSON.parse(raw)
       evalOneR.value = typeof parsed.oneR === 'number' ? parsed.oneR : 5
       evalObjetivo.value = typeof parsed.objetivo === 'number' ? parsed.objetivo : 58000
+      if (typeof parsed.maxDailyLossUSD === 'number') {
+        maxDailyLossUSD.value = parsed.maxDailyLossUSD
+      } else if (typeof parsed.maxDailyLossR === 'number') {
+        maxDailyLossUSD.value = parsed.maxDailyLossR * evalOneR.value
+      } else {
+        maxDailyLossUSD.value = 15
+      }
     }
     const rawTrades = localStorage.getItem(guestEvalTradesKey)
     if (rawTrades) {
@@ -1077,7 +1181,10 @@ function loadEval() {
 }
 
 function persistEval() {
-  localStorage.setItem(guestEvalKey, JSON.stringify({ oneR: evalOneR.value, objetivo: evalObjetivo.value }))
+  localStorage.setItem(
+    guestEvalKey,
+    JSON.stringify({ oneR: evalOneR.value, objetivo: evalObjetivo.value, maxDailyLossUSD: maxDailyLossUSD.value }),
+  )
 }
 
 function persistEvalTrades() {
@@ -1102,6 +1209,8 @@ function stopEvalSubscription() {
     unsubscribeEvalTrades()
     unsubscribeEvalTrades = null
   }
+
+  pendingTrades.value = []
 }
 
 function subscribeToEval(userId) {
@@ -1109,13 +1218,21 @@ function subscribeToEval(userId) {
 
   unsubscribeEval = onSnapshot(doc(db, 'users', userId, 'eval', 'settings'), (snap) => {
     if (snap.exists()) {
-      evalOneR.value = snap.data().oneR ?? 5
-      evalObjetivo.value = snap.data().objetivo ?? 58000
+      const data = snap.data()
+      evalOneR.value = data.oneR ?? 5
+      evalObjetivo.value = data.objetivo ?? 58000
+      if (typeof data.maxDailyLossUSD === 'number') {
+        maxDailyLossUSD.value = data.maxDailyLossUSD
+      } else if (typeof data.maxDailyLossR === 'number') {
+        maxDailyLossUSD.value = data.maxDailyLossR * evalOneR.value
+      } else {
+        maxDailyLossUSD.value = 15
+      }
     }
   })
 
   unsubscribeEvalTrades = onSnapshot(collection(db, 'users', userId, 'trades'), (snap) => {
-    tradesList.value = snap.docs
+    const nextTrades = snap.docs
       .map((d) => ({
         id: d.id,
         r: d.data().r ?? 0,
@@ -1125,6 +1242,7 @@ function subscribeToEval(userId) {
         tradeDate: normalizeFirestoreDate(d.data().tradeDate),
         createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
         rBase: d.data().rBase, // leer el valor de R guardado
+        clientId: d.data().clientId ?? null,
         compliance: d.data().compliance ?? null,
       }))
       .sort((a, b) => {
@@ -1132,6 +1250,15 @@ function subscribeToEval(userId) {
         const tb = normalizeDate(b.createdAt)?.getTime() ?? 0
         return tb - ta
       })
+
+    tradesList.value = nextTrades
+
+    const confirmedClientIds = new Set(nextTrades.map((trade) => trade.clientId).filter(Boolean))
+    if (confirmedClientIds.size) {
+      pendingTrades.value = pendingTrades.value.filter(
+        (trade) => !trade.clientId || !confirmedClientIds.has(trade.clientId),
+      )
+    }
   })
 }
 
@@ -1140,7 +1267,7 @@ async function saveEvalSettings() {
     if (user.value) {
       await setDoc(
         doc(db, 'users', user.value.uid, 'eval', 'settings'),
-        { oneR: evalOneR.value, objetivo: evalObjetivo.value },
+        { oneR: evalOneR.value, objetivo: evalObjetivo.value, maxDailyLossUSD: maxDailyLossUSD.value },
         { merge: true },
       )
       return
@@ -1173,8 +1300,28 @@ function handlePageHide() {
 }
 
 async function addTrade() {
-  if (isOperationLocked.value) {
-    tradeError.value = `Operativa bloqueada. Espera ${operationLockCountdown.value} antes de guardar otro trade.`
+  if (savingTrade.value) {
+    return
+  }
+
+  savingTrade.value = true
+
+  try {
+  const lockMessage = getOperationLockMessage()
+  riskDebug.value = {
+    ...riskDebug.value,
+    source: 'precheck-local',
+    checkedAt: new Date().toLocaleTimeString(),
+    currentSessionUsd: evalUsdHoy.value,
+    currentLossUsedUSD: dailyLossUsedUSD.value,
+    maxDailyLossUSD: maxDailyLossUSD.value,
+    blocked: Boolean(lockMessage),
+    pendingCount: pendingTrades.value.length,
+    serverCount: tradesList.value.length,
+    lockMessage,
+  }
+  if (lockMessage) {
+    tradeError.value = lockMessage
     return
   }
 
@@ -1206,11 +1353,78 @@ async function addTrade() {
 
   if (user.value) {
     try {
+      const snap = await getDocsFromServer(collection(db, 'users', user.value.uid, 'trades'))
+      const serverTrades = snap.docs.map((d) => ({
+        r: d.data().r ?? 0,
+        rBase: d.data().rBase,
+        tradeDate: normalizeFirestoreDate(d.data().tradeDate),
+        createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
+        clientId: d.data().clientId ?? null,
+      }))
+
+      const allRiskTrades = [...pendingTrades.value, ...serverTrades]
+      const seenClientIds = new Set()
+      const dedupedTrades = allRiskTrades.filter((trade) => {
+        if (!trade.clientId) return true
+        if (seenClientIds.has(trade.clientId)) return false
+        seenClientIds.add(trade.clientId)
+        return true
+      })
+
+      const nowMs = Date.now()
+      const currentSessionUsd = dedupedTrades
+        .filter((trade) => isTradeInCurrentRiskSession(trade, nowMs))
+        .reduce((sum, trade) => sum + getTradeUsdAmount(trade), 0)
+
+      const currentLossUsedUSD = Math.max(0, -currentSessionUsd)
+      riskDebug.value = {
+        ...riskDebug.value,
+        source: 'precheck-firestore',
+        checkedAt: new Date().toLocaleTimeString(),
+        currentSessionUsd,
+        currentLossUsedUSD,
+        maxDailyLossUSD: maxDailyLossUSD.value,
+        blocked: currentLossUsedUSD >= maxDailyLossUSD.value,
+        pendingCount: pendingTrades.value.length,
+        serverCount: serverTrades.length,
+        lockMessage: currentLossUsedUSD >= maxDailyLossUSD.value ? 'blocked-firestore' : '',
+      }
+      if (currentLossUsedUSD >= maxDailyLossUSD.value) {
+        const nextReset = getNextRiskReset(nowMs)
+        const waitText = formatCountdownTo(nextReset.getTime(), nowMs)
+        tradeError.value = `Operativa pausada por pérdida diaria máxima: llevas -$${currentLossUsedUSD.toFixed(2)} de $${maxDailyLossUSD.value.toFixed(2)}. Se habilita al reinicio diario de riesgo (00:00 UTC), en ${waitText}.`
+        return
+      }
+    } catch (err) {
+      riskDebug.value = {
+        ...riskDebug.value,
+        source: 'firestore-error',
+        checkedAt: new Date().toLocaleTimeString(),
+        lockMessage: 'firestore-check-failed',
+      }
+      tradeError.value = 'No se pudo sincronizar con Firestore para validar el riesgo diario. Intenta de nuevo.'
+      console.error('Error al sincronizar riesgo diario desde Firestore:', err)
+      return
+    }
+  }
+
+  if (user.value) {
+    const clientId = crypto.randomUUID()
+    pendingTrades.value.unshift({
+      id: `tmp-${clientId}`,
+      ...payload,
+      clientId,
+      createdAt: new Date(),
+    })
+
+    try {
       await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
         ...payload,
+        clientId,
         createdAt: serverTimestamp(),
       })
     } catch (err) {
+      pendingTrades.value = pendingTrades.value.filter((trade) => trade.clientId !== clientId)
       tradeError.value = 'Error al guardar el trade. Verifica tu conexión o permisos.'
       console.error('Error al guardar trade en Firestore:', err)
       return
@@ -1225,6 +1439,14 @@ async function addTrade() {
   }
 
   clearTradeForm()
+  } finally {
+    riskDebug.value = {
+      ...riskDebug.value,
+      source: 'finally',
+      checkedAt: new Date().toLocaleTimeString(),
+    }
+    savingTrade.value = false
+  }
 }
 
 async function removeTrade(tradeId) {
@@ -1429,7 +1651,16 @@ watch(pomodoroGoalHours, (value) => {
   pomodoroGoalHours.value = Math.min(24, Math.max(1, Math.round(value)))
 })
 
-watch([evalOneR, evalObjetivo], () => {
+watch(maxDailyLossUSD, (value) => {
+  if (!Number.isFinite(value)) {
+    maxDailyLossUSD.value = 15
+    return
+  }
+
+  maxDailyLossUSD.value = Math.min(1000000, Math.max(1, Math.round(value * 100) / 100))
+})
+
+watch([evalOneR, evalObjetivo, maxDailyLossUSD], () => {
   scheduleEvalSettingsSave()
 })
 
@@ -2076,7 +2307,7 @@ function scrollToSection(id) {
           <div class="discipline-track">
             <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
           </div>
-          <p v-if="isOperationLocked" class="filter-warning">{{ lockoutCopy }}</p>
+          <p v-if="lockoutCopy" class="filter-warning">{{ lockoutCopy }}</p>
           <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
         </div>
 
@@ -2088,6 +2319,10 @@ function scrollToSection(id) {
           <div class="eval-meta-field">
             <label for="objetivo-selector" style="font-size: 0.95em; color: #7fa1d2;">Objetivo ($)</label>
             <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" style="width: 160px;" />
+          </div>
+          <div class="eval-meta-field">
+            <label for="daily-loss-selector" style="font-size: 0.95em; color: #7fa1d2;">Pérdida diaria máxima ($)</label>
+            <input id="daily-loss-selector" v-model.number="maxDailyLossUSD" class="eval-control" type="number" min="1" max="1000000" step="1" @change="scheduleEvalSettingsSave" style="width: 180px;" />
           </div>
         </div>
         <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
@@ -2101,6 +2336,20 @@ function scrollToSection(id) {
           </div>
           <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
             <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80', height: '100%', borderRadius: '8px' }"></div>
+          </div>
+        </div>
+        <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
+          <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+            <span style="font-size: 0.95em; color: #7fa1d2;">Control de riesgo diario:</span>
+            <strong :style="{ color: dailyLossLimitReached ? '#facc15' : '#f87171' }">-${{ maxDailyLossUSD.toFixed(2) }}</strong>
+            <span style="font-size: 0.95em; color: #7fa1d2;">Pérdida usada:</span>
+            <strong :style="{ color: dailyLossUsedUSD > 0 ? '#facc15' : '#4ade80' }">${{ dailyLossUsedUSD.toFixed(2) }}</strong>
+            <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
+            <strong :style="{ color: dailyLossRemainingUSD > 0 ? '#4ade80' : '#facc15' }">${{ dailyLossRemainingUSD.toFixed(2) }}</strong>
+            <span style="font-size: 0.85em; color: #9fb7dc; padding: 0.2rem 0.55rem; border: 1px solid rgba(123, 156, 207, 0.35); border-radius: 999px;">Reinicio 00:00 UTC</span>
+          </div>
+          <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
+            <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185', height: '100%', borderRadius: '8px' }"></div>
           </div>
         </div>
         <div class="eval-journal-top">
@@ -2130,7 +2379,7 @@ function scrollToSection(id) {
         </div>
 
         <div class="eval-journal-actions">
-          <button class="primary-button" :disabled="isOperationLocked" @click="addTrade">Guardar trade</button>
+          <button class="primary-button" :disabled="isOperationLocked || savingTrade" @click="addTrade">Guardar trade</button>
           <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
         </div>
         <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
