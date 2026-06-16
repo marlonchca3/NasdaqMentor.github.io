@@ -2311,45 +2311,46 @@ function scrollToSection(id) {
           <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
         </div>
 
-        <div class="eval-meta-top" style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+        <div class="eval-meta-top">
           <div class="eval-meta-field">
-            <label for="r-selector" style="font-size: 0.95em; color: #7fa1d2;">Seleccionador de R ($)</label>
-            <input id="r-selector" v-model.number="evalOneR" class="eval-control" type="number" min="1" max="100000" step="1" @change="scheduleEvalSettingsSave" style="width: 120px;" />
+            <label for="r-selector" class="eval-meta-label">Seleccionador de R ($)</label>
+            <input id="r-selector" v-model.number="evalOneR" class="eval-control eval-meta-input" type="number" min="1" max="100000" step="1" @change="scheduleEvalSettingsSave" />
           </div>
           <div class="eval-meta-field">
-            <label for="objetivo-selector" style="font-size: 0.95em; color: #7fa1d2;">Objetivo ($)</label>
-            <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" style="width: 160px;" />
+            <label for="objetivo-selector" class="eval-meta-label">Objetivo ($)</label>
+            <input id="objetivo-selector" v-model.number="evalObjetivo" class="eval-control eval-meta-input" type="number" min="1" max="10000000" step="1" @change="scheduleEvalSettingsSave" />
           </div>
           <div class="eval-meta-field">
-            <label for="daily-loss-selector" style="font-size: 0.95em; color: #7fa1d2;">Pérdida diaria máxima ($)</label>
-            <input id="daily-loss-selector" v-model.number="maxDailyLossUSD" class="eval-control" type="number" min="1" max="1000000" step="1" @change="scheduleEvalSettingsSave" style="width: 180px;" />
+            <label for="daily-loss-selector" class="eval-meta-label">Pérdida diaria máxima ($)</label>
+            <input id="daily-loss-selector" v-model.number="maxDailyLossUSD" class="eval-control eval-meta-input" type="number" min="1" max="1000000" step="1" @change="scheduleEvalSettingsSave" />
           </div>
         </div>
-        <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
-          <div style="display: flex; align-items: center; gap: 1rem;">
-            <span style="font-size: 0.95em; color: #7fa1d2;">Avance objetivo:</span>
+        <div class="eval-objetivo-bar">
+          <div class="eval-objetivo-summary">
+            <span class="eval-objetivo-label">Avance objetivo:</span>
             <strong :style="{ color: evalTotalUSD < 0 ? '#facc15' : '#4ade80' }">${{ evalTotalUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
+            <span class="eval-objetivo-label">Restante:</span>
             <strong :style="{ color: evalRestanUSD > 0 ? '#4ade80' : '#facc15' }">${{ evalRestanUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Progreso:</span>
+            <span class="eval-objetivo-label">Progreso:</span>
             <strong style="color: #60a5fa;">{{ evalProgress }}%</strong>
           </div>
-          <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
-            <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80', height: '100%', borderRadius: '8px' }"></div>
+          <div class="objetivo-progress-track">
+            <div class="objetivo-progress-fill" :style="{ width: evalProgress + '%', background: '#4ade80' }"></div>
           </div>
         </div>
-        <div class="eval-objetivo-bar" style="margin-bottom: 1rem;">
-          <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-            <span style="font-size: 0.95em; color: #7fa1d2;">Control de riesgo diario:</span>
+        <div class="eval-objetivo-bar">
+          <div class="eval-objetivo-summary">
+            <span class="eval-objetivo-label">Control de riesgo diario:</span>
             <strong :style="{ color: dailyLossLimitReached ? '#facc15' : '#f87171' }">-${{ maxDailyLossUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Pérdida usada:</span>
+            <span class="eval-objetivo-label">Pérdida usada:</span>
             <strong :style="{ color: dailyLossUsedUSD > 0 ? '#facc15' : '#4ade80' }">${{ dailyLossUsedUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.95em; color: #7fa1d2;">Restante:</span>
+            <span class="eval-objetivo-label">Restante:</span>
             <strong :style="{ color: dailyLossRemainingUSD > 0 ? '#4ade80' : '#facc15' }">${{ dailyLossRemainingUSD.toFixed(2) }}</strong>
-            <span style="font-size: 0.85em; color: #9fb7dc; padding: 0.2rem 0.55rem; border: 1px solid rgba(123, 156, 207, 0.35); border-radius: 999px;">Reinicio 00:00 UTC</span>
+            <span class="eval-risk-reset-pill">Reinicio 00:00 UTC</span>
           </div>
-          <div class="objetivo-progress-track" style="background: #222b3a; border-radius: 8px; height: 16px; margin-top: 6px; width: 100%;">
-            <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185', height: '100%', borderRadius: '8px' }"></div>
+          <span class="objetivo-progress-label">Barra de pérdida diaria</span>
+          <div class="objetivo-progress-track">
+            <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185' }"></div>
           </div>
         </div>
         <div class="eval-journal-top">
