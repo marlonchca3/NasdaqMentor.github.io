@@ -1333,11 +1333,18 @@ async function addTrade() {
     tradeError.value = 'Debes seleccionar el cumplimiento de reglas antes de guardar el trade.'
     return
   }
-  const rVal = parseFloat(tradeInput.value)
-  if (!Number.isFinite(rVal) || rVal === 0) {
-    tradeError.value = 'Debes llenar el campo R antes de guardar el trade.'
+  const usdVal = parseFloat(tradeInput.value)
+  if (!Number.isFinite(usdVal) || usdVal === 0) {
+    tradeError.value = 'Debes llenar el campo USD antes de guardar el trade.'
     return
   }
+
+  if (!Number.isFinite(evalOneR.value) || evalOneR.value <= 0) {
+    tradeError.value = 'Configura un valor valido en Seleccionador de R ($) para convertir USD a R.'
+    return
+  }
+
+  const rVal = usdVal / evalOneR.value
 
   const parsedTradeDate = normalizeDate(tradeDate.value || new Date()) || new Date()
 
@@ -2355,9 +2362,10 @@ function openSection(id) {
           <input
             v-model="tradeInput"
             class="eval-control"
-            type="text"
+            type="number"
             inputmode="decimal"
-            placeholder="R"
+            step="0.01"
+            placeholder="USD"
             @keydown.enter="addTrade"
           />
           <input
