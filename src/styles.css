@@ -2739,6 +2739,35 @@ h1 {
   background: rgba(255, 233, 203, 0.68);
 }
 
+:root[data-theme='light'] .pomodoro-goal-card,
+:root[data-theme='light'] .pomodoro-goal-card.static {
+  background: rgba(255, 243, 223, 0.96) !important;
+  border-color: rgba(166, 83, 29, 0.28) !important;
+}
+
+:root[data-theme='light'] .pomodoro-stat-card {
+  background: rgba(255, 243, 223, 0.96) !important;
+  border-color: rgba(166, 83, 29, 0.28) !important;
+}
+
+:root[data-theme='light'] .pomodoro-goal-card span,
+:root[data-theme='light'] .pomodoro-goal-card strong,
+:root[data-theme='light'] .pomodoro-stat-card span,
+:root[data-theme='light'] .pomodoro-stat-card strong,
+:root[data-theme='light'] .stepper-value {
+  color: #2e1306 !important;
+}
+
+:root[data-theme='light'] .stepper-btn {
+  background: rgba(255, 236, 210, 0.96);
+  border-color: rgba(166, 83, 29, 0.3);
+  color: #5a2208;
+}
+
+:root[data-theme='light'] .stepper-btn:not(:disabled):active {
+  background: rgba(185, 83, 29, 0.18);
+}
+
 :root[data-theme='light'] .stat-pill,
 :root[data-theme='light'] .task-card,
 :root[data-theme='light'] .modern-clock {
@@ -2790,6 +2819,7 @@ h1 {
 :root[data-theme='light'] .task-card p,
 :root[data-theme='light'] .stat-pill span,
 :root[data-theme='light'] .auth-copy span,
+:root[data-theme='light'] .progress-header span,
 :root[data-theme='light'] .phase-pill,
 :root[data-theme='light'] .pomodoro-timer-card p,
 :root[data-theme='light'] .pomodoro-progress-head,
@@ -2807,11 +2837,66 @@ h1 {
   color: #9b6242;
 }
 
+:root[data-theme='light'] .compliance-card {
+  background: rgba(255, 243, 223, 0.98) !important;
+  border-color: rgba(166, 83, 29, 0.34) !important;
+  color: #1f120a !important;
+}
+
+:root[data-theme='light'] .compliance-card:not(.active) {
+  background: #fff1dc !important;
+  border-color: rgba(166, 83, 29, 0.34) !important;
+}
+
+:root[data-theme='light'] .compliance-card:not(.active) strong,
+:root[data-theme='light'] .compliance-card:not(.active) span {
+  color: #2e1306 !important;
+}
+
+:root[data-theme='light'] .compliance-card span {
+  color: #3b1b0c !important;
+}
+
+:root[data-theme='light'] .compliance-card strong {
+  color: #2e1306 !important;
+}
+
+:root[data-theme='light'] .compliance-card--segui.active {
+  background: rgba(29, 127, 77, 0.18) !important;
+  border-color: rgba(29, 127, 77, 0.52) !important;
+}
+
+:root[data-theme='light'] .compliance-card--segui.active strong,
+:root[data-theme='light'] .compliance-card--segui.active span {
+  color: #0f5a31 !important;
+}
+
+:root[data-theme='light'] .compliance-card--parcial.active {
+  background: rgba(154, 90, 0, 0.18) !important;
+  border-color: rgba(154, 90, 0, 0.46) !important;
+}
+
+:root[data-theme='light'] .compliance-card--parcial.active strong,
+:root[data-theme='light'] .compliance-card--parcial.active span {
+  color: #6a3d00 !important;
+}
+
+:root[data-theme='light'] .compliance-card--fallo.active {
+  background: rgba(168, 33, 33, 0.16) !important;
+  border-color: rgba(168, 33, 33, 0.45) !important;
+}
+
+:root[data-theme='light'] .compliance-card--fallo.active strong,
+:root[data-theme='light'] .compliance-card--fallo.active span {
+  color: #7d1414 !important;
+}
+
 :root[data-theme='light'] .calendar-month-label,
 :root[data-theme='light'] .calendar-cell-content strong,
 :root[data-theme='light'] .noticias-item-info strong,
 :root[data-theme='light'] .compliance-card strong,
 :root[data-theme='light'] .pomodoro-head h2,
+:root[data-theme='light'] .progress-header strong,
 :root[data-theme='light'] .eval-title,
 :root[data-theme='light'] .stepper-value,
 :root[data-theme='light'] .pomodoro-stat-card strong,
@@ -2819,6 +2904,23 @@ h1 {
 :root[data-theme='light'] .phase-pill,
 :root[data-theme='light'] .task-card.complete p {
   color: #2e1306;
+}
+
+:root[data-theme='light'] .pomodoro-eyebrow,
+:root[data-theme='light'] .pomodoro-badges span,
+:root[data-theme='light'] .noticias-active-badge span,
+:root[data-theme='light'] .drag-handle {
+  color: #6e2c11;
+}
+
+:root[data-theme='light'] .pomodoro-badges span,
+:root[data-theme='light'] .noticias-active-badge {
+  background: rgba(178, 65, 18, 0.12);
+  border-color: rgba(178, 65, 18, 0.32);
+}
+
+:root[data-theme='light'] .task-card.complete p {
+  color: #1f7a44;
 }
 
 :root[data-theme='light'] .eval-table td {
@@ -2853,6 +2955,22 @@ h1 {
 :root[data-theme='light'] .calendar-tooltip li,
 :root[data-theme='light'] .calendar-tooltip strong {
   color: #4c250f;
+}
+
+:root[data-theme='light'] .calendar-usd.pos {
+  color: #1f7a44 !important;
+}
+
+:root[data-theme='light'] .calendar-usd.neg {
+  color: #b42318 !important;
+}
+
+:root[data-theme='light'] .calendar-tooltip strong.pos {
+  color: #1f7a44 !important;
+}
+
+:root[data-theme='light'] .calendar-tooltip strong.neg {
+  color: #b42318 !important;
 }
 
 :root[data-theme='light'] .sync-display {
