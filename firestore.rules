@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedInWithGoogle() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isOwner(userId) {
+      return isSignedInWithGoogle() && request.auth.uid == userId;
+    }
+
+    // Perfil del usuario (opcional)
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Tareas del usuario
+    match /users/{userId}/tasks/{taskId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Ajustes de evaluacion (ej: oneR, objetivo, maxDailyLossUSD)
+    match /users/{userId}/eval/{docId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Trades del usuario
+    match /users/{userId}/trades/{tradeId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Denegar todo lo demas por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

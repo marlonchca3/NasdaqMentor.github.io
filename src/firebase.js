@@ -3,12 +3,12 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyB6kGON2V4RWRp8Q4T1agPEWTC777aBMBE',
-  authDomain: 'nasdaq-checklist-marlon.firebaseapp.com',
-  projectId: 'nasdaq-checklist-marlon',
-  storageBucket: 'nasdaq-checklist-marlon.firebasestorage.app',
-  messagingSenderId: '508391209615',
-  appId: '1:508391209615:web:fb8e89880e2a60c81ecefa',
+  apiKey: 'AIzaSyCi-lu8w0QNR7aLke6_1x320siUPn6nczo',
+  authDomain: 'nasdaq-fdfec.firebaseapp.com',
+  projectId: 'nasdaq-fdfec',
+  storageBucket: 'nasdaq-fdfec.firebasestorage.app',
+  messagingSenderId: '712261404322',
+  appId: '1:712261404322:web:c110599cc1b229280f39fb',
 }
 
 const firebaseApp = initializeApp(firebaseConfig)
