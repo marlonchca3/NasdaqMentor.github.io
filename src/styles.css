@@ -2171,6 +2171,300 @@ h1 {
   }
 }
 
+/* ── Sesiones (horario + equipo) ─────────────────────────────── */
+.sesiones-panel {
+  margin-top: 22px;
+  padding: 20px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(7, 17, 38, 0.96), rgba(9, 26, 52, 0.92));
+  border: 1px solid rgba(120, 164, 230, 0.2);
+}
+
+.sesiones-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sesiones-eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #72b2ff;
+  font-weight: 700;
+}
+
+.sesiones-title {
+  margin: 0.35rem 0 0.4rem;
+  font-size: clamp(1.25rem, 3vw, 1.9rem);
+}
+
+.sesiones-copy {
+  margin: 0;
+  color: #a8c0e4;
+  max-width: 680px;
+}
+
+.sesiones-clock-wrap {
+  min-width: 180px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(100, 196, 255, 0.3);
+  background: rgba(44, 197, 232, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sesiones-clock-label {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8ec9f8;
+}
+
+.sesiones-clock-value {
+  font-size: 1.25rem;
+  color: #e8f4ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.sesion-status-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.session-live-pill {
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  opacity: 1;
+}
+
+.session-live-pill--on {
+  color: #7effb2;
+  background: rgba(28, 199, 103, 0.14);
+  border-color: rgba(28, 199, 103, 0.5);
+}
+
+.session-live-pill--off {
+  color: #ffcc71;
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.session-next-copy {
+  margin: 0;
+  color: #9fb6d7;
+  font-size: 0.92rem;
+}
+
+.session-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.session-slot-card {
+  border-radius: 16px;
+  border: 1px solid rgba(116, 145, 196, 0.22);
+  background: rgba(7, 15, 34, 0.84);
+  padding: 12px;
+}
+
+.session-slot-card--active {
+  border-color: rgba(28, 199, 103, 0.46);
+  box-shadow: 0 0 0 1px rgba(28, 199, 103, 0.18);
+}
+
+.session-slot-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.session-slot-top strong {
+  font-size: 1rem;
+}
+
+.session-slot-state {
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+}
+
+.session-slot-state--on {
+  color: #86f7af;
+  background: rgba(28, 199, 103, 0.14);
+  border-color: rgba(28, 199, 103, 0.4);
+}
+
+.session-slot-state--off {
+  color: #fcd876;
+  background: rgba(251, 191, 36, 0.14);
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.session-slot-inputs {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.session-slot-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: #96b1d8;
+}
+
+.session-time-input {
+  min-height: 42px;
+  padding: 0 10px;
+}
+
+.session-slot-error {
+  margin: 8px 0 0;
+  color: #f6b7c4;
+  font-size: 0.8rem;
+}
+
+.team-room {
+  margin-top: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(120, 164, 230, 0.2);
+  background: rgba(5, 13, 30, 0.9);
+  padding: 14px;
+}
+
+.team-room-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.team-room-eyebrow {
+  margin: 0;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #72b2ff;
+}
+
+.team-room-head h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.team-presence-btn {
+  min-height: 40px;
+  border-radius: 12px;
+  padding: 0 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.team-presence-btn--on {
+  color: #86f7af;
+  background: rgba(28, 199, 103, 0.12);
+  border-color: rgba(28, 199, 103, 0.4);
+}
+
+.team-presence-btn--off {
+  color: #ffce7d;
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.team-comment-form {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.team-comments-empty {
+  margin-top: 10px;
+  border: 1px dashed rgba(116, 145, 196, 0.35);
+  border-radius: 12px;
+  padding: 12px;
+  color: #a4bddf;
+  text-align: center;
+}
+
+.team-comments-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-comment-item {
+  border-radius: 12px;
+  border: 1px solid rgba(116, 145, 196, 0.22);
+  background: rgba(9, 19, 42, 0.85);
+  padding: 10px 12px;
+}
+
+.team-comment-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.team-comment-meta {
+  color: #8ea7cf;
+  font-size: 0.8rem;
+}
+
+.team-comment-item p {
+  margin: 8px 0 0;
+  color: #e5efff;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 920px) {
+  .session-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sesion-status-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .sesiones-panel {
+    padding: 16px;
+  }
+
+  .team-comment-form {
+    grid-template-columns: 1fr;
+  }
+
+  .team-comment-form .primary-button {
+    width: 100%;
+  }
+}
+
 /* ═══════════════════════════════════════════════════
    Noticias / Alertas section
 ═══════════════════════════════════════════════════ */

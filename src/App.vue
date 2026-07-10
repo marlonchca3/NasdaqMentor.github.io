@@ -10,7 +10,10 @@ import {
   deleteDoc,
   doc,
   getDocsFromServer,
+  limit,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -1688,6 +1691,7 @@ onUnmounted(() => {
   stopPomodoro()
   stopTaskSubscription()
   stopEvalSubscription()
+  stopTeamCommentsSubscription()
   syncStop()
   if (syncClockInterval) { clearInterval(syncClockInterval); syncClockInterval = null }
   if ('speechSynthesis' in window) {
@@ -1704,8 +1708,29 @@ onMounted(() => {
 
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', handlePageHide)
-    if (!localStorage.getItem('nasdaq-mentor-intro-seen')) {
-      showIntro.value = true
+
+    const rawSchedule = localStorage.getItem(sessionScheduleStorageKey)
+    if (rawSchedule) {
+      try {
+        const parsed = JSON.parse(rawSchedule)
+        if (Array.isArray(parsed) && parsed.length) {
+          sessionSchedule.value = parsed
+            .map((item) => ({
+              id: String(item.id || ''),
+              label: String(item.label || ''),
+              start: String(item.start || ''),
+              end: String(item.end || ''),
+            }))
+            .filter((item) => item.id && item.label)
+        }
+      } catch {
+        sessionSchedule.value = defaultSessionSchedule.map((item) => ({ ...item }))
+      }
+    }
+
+    const rawPresence = localStorage.getItem(sessionPresenceStorageKey)
+    if (rawPresence === 'true' || rawPresence === 'false') {
+      sessionPresence.value = rawPresence === 'true'
     }
   }
 
@@ -1719,15 +1744,18 @@ onMounted(() => {
   onAuthStateChanged(auth, (firebaseUser) => {
     stopTaskSubscription()
     stopEvalSubscription()
+    stopTeamCommentsSubscription()
     user.value = firebaseUser
     authReady.value = true
 
     if (firebaseUser) {
       subscribeToTasks(firebaseUser.uid)
       subscribeToEval(firebaseUser.uid)
+      subscribeTeamComments()
       return
     }
 
+    teamComments.value = []
     loadTasks()
     loadEval()
   })
@@ -1943,6 +1971,215 @@ function onSyncModeChange() {
   }
 }
 
+// ── Sesiones de trading + equipo ───────────────────────────────
+const sessionScheduleStorageKey = 'nasdaq-mentor-session-schedule'
+const sessionPresenceStorageKey = 'nasdaq-mentor-session-presence'
+const defaultSessionSchedule = [
+  { id: 'london', label: 'Londres', start: '03:00', end: '06:00' },
+  { id: 'ny-am', label: 'New York AM', start: '08:30', end: '11:30' },
+  { id: 'ny-pm', label: 'New York PM', start: '13:30', end: '16:00' },
+]
+const sessionSchedule = ref(defaultSessionSchedule.map((item) => ({ ...item })))
+const sessionPresence = ref(false)
+const teamCommentInput = ref('')
+const teamCommentError = ref('')
+const teamComments = ref([])
+let unsubscribeTeamComments = null
+
+function parseMinutes(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) {
+    return null
+  }
+  return (h * 60) + m
+}
+
+function formatClockHHMM(date) {
+  return new Intl.DateTimeFormat('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+const sessionClockText = computed(() => formatClockHHMM(new Date(cooldownNow.value)))
+
+const scheduleWithState = computed(() => {
+  const now = new Date(cooldownNow.value)
+  const nowMinutes = (now.getHours() * 60) + now.getMinutes()
+
+  return sessionSchedule.value.map((slot) => {
+    const startMin = parseMinutes(slot.start)
+    const endMin = parseMinutes(slot.end)
+    if (startMin === null || endMin === null) {
+      return { ...slot, active: false, invalid: true }
+    }
+
+    const wraps = endMin <= startMin
+    const active = wraps
+      ? (nowMinutes >= startMin || nowMinutes < endMin)
+      : (nowMinutes >= startMin && nowMinutes < endMin)
+
+    return {
+      ...slot,
+      active,
+      invalid: false,
+      wraps,
+      startMin,
+      endMin,
+    }
+  })
+})
+
+const activeTradingSlot = computed(() => scheduleWithState.value.find((slot) => slot.active) || null)
+const canOperateNow = computed(() => Boolean(activeTradingSlot.value))
+const sessionStatusLabel = computed(() => (canOperateNow.value ? 'Operativa habilitada' : 'Fuera de horario'))
+
+const nextTradingSlot = computed(() => {
+  const now = new Date(cooldownNow.value)
+  const nowMinutes = (now.getHours() * 60) + now.getMinutes()
+
+  let best = null
+  scheduleWithState.value.forEach((slot) => {
+    if (slot.invalid) return
+    let minutesUntilStart = slot.startMin - nowMinutes
+    if (minutesUntilStart <= 0) {
+      minutesUntilStart += 24 * 60
+    }
+    if (!best || minutesUntilStart < best.minutesUntilStart) {
+      best = { label: slot.label, minutesUntilStart }
+    }
+  })
+
+  return best
+})
+
+const nextTradingSlotText = computed(() => {
+  if (canOperateNow.value && activeTradingSlot.value) {
+    return `Sesion activa: ${activeTradingSlot.value.label}`
+  }
+  if (!nextTradingSlot.value) {
+    return 'Define al menos una sesion valida para operar'
+  }
+
+  const mins = nextTradingSlot.value.minutesUntilStart
+  const hours = Math.floor(mins / 60)
+  const minutes = mins % 60
+  return `Proxima sesion: ${nextTradingSlot.value.label} en ${hours}h ${String(minutes).padStart(2, '0')}m`
+})
+
+function toggleSessionPresence() {
+  sessionPresence.value = !sessionPresence.value
+}
+
+function updateSessionTime(slotId, field, value) {
+  if (field !== 'start' && field !== 'end') {
+    return
+  }
+
+  const nextValue = String(value || '').slice(0, 5)
+  const slot = sessionSchedule.value.find((item) => item.id === slotId)
+  if (!slot) {
+    return
+  }
+
+  slot[field] = nextValue
+}
+
+function stopTeamCommentsSubscription() {
+  if (unsubscribeTeamComments) {
+    unsubscribeTeamComments()
+    unsubscribeTeamComments = null
+  }
+}
+
+function subscribeTeamComments() {
+  stopTeamCommentsSubscription()
+  if (!user.value) {
+    teamComments.value = []
+    return
+  }
+
+  const commentsQuery = query(
+    collection(db, 'sessionRoomComments'),
+    orderBy('createdAt', 'desc'),
+    limit(40),
+  )
+
+  unsubscribeTeamComments = onSnapshot(commentsQuery, (snapshot) => {
+    teamComments.value = snapshot.docs.map((item) => {
+      const data = item.data()
+      return {
+        id: item.id,
+        text: String(data.text || ''),
+        author: String(data.author || 'Trader'),
+        active: Boolean(data.active),
+        createdAt: data.createdAt || null,
+        uid: data.uid || null,
+      }
+    })
+  }, () => {
+    teamCommentError.value = 'No se pudieron cargar los comentarios del equipo.'
+  })
+}
+
+function formatTeamCommentDate(createdAt) {
+  if (!createdAt || typeof createdAt.toDate !== 'function') {
+    return 'Ahora'
+  }
+  const date = createdAt.toDate()
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+async function sendTeamComment() {
+  teamCommentError.value = ''
+  const text = teamCommentInput.value.trim()
+
+  if (!user.value) {
+    teamCommentError.value = 'Inicia sesion para comentar en el equipo.'
+    return
+  }
+
+  if (!text) {
+    teamCommentError.value = 'Escribe un comentario primero.'
+    return
+  }
+
+  if (text.length > 220) {
+    teamCommentError.value = 'El comentario supera 220 caracteres.'
+    return
+  }
+
+  await addDoc(collection(db, 'sessionRoomComments'), {
+    text,
+    author: user.value.displayName || 'Trader',
+    uid: user.value.uid,
+    active: sessionPresence.value,
+    createdAt: serverTimestamp(),
+  })
+
+  teamCommentInput.value = ''
+}
+
+watch(sessionSchedule, (nextValue) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(sessionScheduleStorageKey, JSON.stringify(nextValue))
+  }
+}, { deep: true })
+
+watch(sessionPresence, (nextValue) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(sessionPresenceStorageKey, String(nextValue))
+  }
+})
+
 // ── Sidebar ──────────────────────────────────────────────────────
 const sidebarOpen = ref(false)
 const ejerciciosOpen = ref(false)
@@ -2021,6 +2258,12 @@ function openSection(id) {
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'pomodoro' }" @click="openSection('pomodoro')">
             <span class="sidebar-icon">⏱</span>
             <span class="sidebar-label">Pomodoro</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'sesiones' }" @click="openSection('sesiones')">
+            <span class="sidebar-icon">🕒</span>
+            <span class="sidebar-label">Sesiones</span>
           </button>
         </li>
         <li>
@@ -2589,6 +2832,110 @@ function openSection(id) {
           </button>
           <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
           <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
+        </div>
+      </section>
+
+      <section v-show="activeSection === 'sesiones'" id="sesiones" class="sesiones-panel">
+        <div class="sesiones-head">
+          <div>
+            <p class="sesiones-eyebrow">OPERATIVA</p>
+            <h2 class="sesiones-title">Horario de sesión + equipo</h2>
+            <p class="sesiones-copy">Opera solo dentro de tus franjas horarias. Fuera de horario, la app te marca en modo inactivo.</p>
+          </div>
+          <div class="sesiones-clock-wrap">
+            <span class="sesiones-clock-label">Hora local</span>
+            <strong class="sesiones-clock-value">{{ sessionClockText }}</strong>
+          </div>
+        </div>
+
+        <div class="sesion-status-row">
+          <button
+            class="session-live-pill"
+            :class="canOperateNow ? 'session-live-pill--on' : 'session-live-pill--off'"
+            type="button"
+            disabled
+          >
+            {{ canOperateNow ? '🟢 En ventana de operación' : '🔴 Fuera de ventana' }}
+          </button>
+          <p class="session-next-copy">{{ sessionStatusLabel }} · {{ nextTradingSlotText }}</p>
+        </div>
+
+        <div class="session-grid">
+          <article v-for="slot in scheduleWithState" :key="slot.id" class="session-slot-card" :class="{ 'session-slot-card--active': slot.active }">
+            <div class="session-slot-top">
+              <strong>{{ slot.label }}</strong>
+              <span class="session-slot-state" :class="slot.active ? 'session-slot-state--on' : 'session-slot-state--off'">
+                {{ slot.active ? 'Activa' : 'Inactiva' }}
+              </span>
+            </div>
+            <div class="session-slot-inputs">
+              <label>
+                Inicio
+                <input
+                  :value="slot.start"
+                  type="time"
+                  class="eval-control session-time-input"
+                  @input="updateSessionTime(slot.id, 'start', $event.target.value)"
+                  @change="updateSessionTime(slot.id, 'start', $event.target.value)"
+                />
+              </label>
+              <label>
+                Fin
+                <input
+                  :value="slot.end"
+                  type="time"
+                  class="eval-control session-time-input"
+                  @input="updateSessionTime(slot.id, 'end', $event.target.value)"
+                  @change="updateSessionTime(slot.id, 'end', $event.target.value)"
+                />
+              </label>
+            </div>
+            <p v-if="slot.invalid" class="session-slot-error">Horario inválido, usa formato HH:MM.</p>
+          </article>
+        </div>
+
+        <div class="team-room">
+          <div class="team-room-head">
+            <div>
+              <p class="team-room-eyebrow">EQUIPO</p>
+              <h3>Chat / comentarios de sesión</h3>
+            </div>
+            <button
+              class="team-presence-btn"
+              :class="sessionPresence ? 'team-presence-btn--on' : 'team-presence-btn--off'"
+              @click="toggleSessionPresence"
+            >
+              {{ sessionPresence ? '🟢 Activo en sesión' : '🔴 Inactivo en sesión' }}
+            </button>
+          </div>
+
+          <div class="team-comment-form">
+            <input
+              v-model="teamCommentInput"
+              class="eval-control"
+              type="text"
+              maxlength="220"
+              placeholder="Escribe un comentario para el equipo"
+              @keydown.enter="sendTeamComment"
+            />
+            <button class="primary-button" @click="sendTeamComment">Enviar</button>
+          </div>
+          <p v-if="teamCommentError" class="error-banner" style="margin-top: 0.5rem;">{{ teamCommentError }}</p>
+
+          <div v-if="!teamComments.length" class="team-comments-empty">
+            Aún no hay comentarios del equipo.
+          </div>
+          <div v-else class="team-comments-list">
+            <article v-for="comment in teamComments" :key="comment.id" class="team-comment-item">
+              <div class="team-comment-head">
+                <strong>{{ comment.author }}</strong>
+                <span class="team-comment-meta">
+                  {{ comment.active ? '🟢 activo' : '🔴 inactivo' }} · {{ formatTeamCommentDate(comment.createdAt) }}
+                </span>
+              </div>
+              <p>{{ comment.text }}</p>
+            </article>
+          </div>
         </div>
       </section>
 
