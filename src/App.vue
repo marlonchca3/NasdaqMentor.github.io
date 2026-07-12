@@ -731,10 +731,38 @@ const monthLabel = computed(() =>
   }),
 )
 
+const calendarSourceTrades = computed(() => {
+  const mergedTrades = [...tradesList.value, ...pendingTrades.value]
+  const seenClientIds = new Set()
+  const seenIds = new Set()
+
+  return mergedTrades.filter((trade) => {
+    if (trade.clientId) {
+      if (seenClientIds.has(trade.clientId)) {
+        return false
+      }
+      seenClientIds.add(trade.clientId)
+      return true
+    }
+
+    const tradeId = String(trade.id || '')
+    if (!tradeId) {
+      return true
+    }
+
+    if (seenIds.has(tradeId)) {
+      return false
+    }
+
+    seenIds.add(tradeId)
+    return true
+  })
+})
+
 const monthTrades = computed(() => {
   const y = calendarMonth.value.getFullYear()
   const m = calendarMonth.value.getMonth()
-  return tradesList.value.filter((trade) => {
+  return calendarSourceTrades.value.filter((trade) => {
     const d = normalizeDate(trade.tradeDate || trade.createdAt)
     return d && d.getFullYear() === y && d.getMonth() === m
   })
