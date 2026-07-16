@@ -529,6 +529,10 @@
   --accent-blue: #3484ff;
   --accent-cyan: #2cc5e8;
   --accent-green: #1cc767;
+  --pnl-pos: #1cc767;
+  --pnl-neg: #facc15;
+  --pnl-pos-glow: rgba(28, 199, 103, 0.42);
+  --pnl-neg-glow: rgba(250, 204, 21, 0.42);
   --danger-bg: rgba(136, 46, 72, 0.22);
   --danger-text: #f6b7c4;
   --shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
@@ -2903,6 +2907,10 @@ h1 {
   --accent-blue: #cb4e15;
   --accent-cyan: #e9771e;
   --accent-green: #1d7f4d;
+  --pnl-pos: #39ff14;
+  --pnl-neg: #fff200;
+  --pnl-pos-glow: rgba(57, 255, 20, 0.42);
+  --pnl-neg-glow: rgba(255, 242, 0, 0.42);
   --danger-bg: rgba(175, 32, 32, 0.12);
   --danger-text: #9e1d1d;
   --shadow: 0 20px 48px rgba(122, 57, 18, 0.2);
@@ -3221,6 +3229,16 @@ h1 {
   color: #4c250f;
 }
 
+:root[data-theme='light'] .eval-table .pos {
+  color: #39ff14 !important;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.42);
+}
+
+:root[data-theme='light'] .eval-table .neg {
+  color: #fff200 !important;
+  text-shadow: 0 0 8px rgba(255, 242, 0, 0.42);
+}
+
 :root[data-theme='light'] .calendar-nav,
 :root[data-theme='light'] .calendar-today,
 :root[data-theme='light'] .google-button,
@@ -3252,19 +3270,23 @@ h1 {
 }
 
 :root[data-theme='light'] .calendar-usd.pos {
-  color: #1f7a44 !important;
+  color: #39ff14 !important;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.42);
 }
 
 :root[data-theme='light'] .calendar-usd.neg {
-  color: #b42318 !important;
+  color: #fff200 !important;
+  text-shadow: 0 0 8px rgba(255, 242, 0, 0.42);
 }
 
 :root[data-theme='light'] .calendar-tooltip strong.pos {
-  color: #1f7a44 !important;
+  color: #39ff14 !important;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.42);
 }
 
 :root[data-theme='light'] .calendar-tooltip strong.neg {
-  color: #b42318 !important;
+  color: #fff200 !important;
+  text-shadow: 0 0 8px rgba(255, 242, 0, 0.42);
 }
 
 :root[data-theme='light'] .sync-display {
