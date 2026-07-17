@@ -1842,6 +1842,96 @@ const newAlertText = ref('')
 const newAlertDate = ref(formatDateForInput(new Date()))
 const newAlertTime = ref('')
 const alertsPaused = ref(false)
+const marketNews = ref([])
+const marketNewsLoading = ref(false)
+const marketNewsError = ref('')
+const marketNewsTab = ref('nasdaq')
+const marketNewsLastUpdated = ref('')
+const NEWS_API_KEY = import.meta.env.VITE_NEWSAPI_KEY || '41984d1199fa487db515097f35abaced'
+
+const marketNewsQueries = {
+  nasdaq: '(NASDAQ OR "Nasdaq Composite" OR NDX OR QQQ) AND (stock OR market OR earnings)',
+  sp500: '("S&P 500" OR SP500 OR SPX OR SPY) AND (stock OR market OR earnings)',
+}
+
+function getMarketNewsTitle() {
+  return marketNewsTab.value === 'sp500' ? 'S&P 500' : 'Nasdaq'
+}
+
+function formatMarketNewsDate(isoDate) {
+  const parsed = new Date(isoDate)
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Fecha desconocida'
+  }
+
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed)
+}
+
+async function fetchMarketNews() {
+  marketNewsError.value = ''
+  marketNewsLoading.value = true
+
+  try {
+    const query = marketNewsQueries[marketNewsTab.value] || marketNewsQueries.nasdaq
+    const params = new URLSearchParams({
+      q: query,
+      language: 'en',
+      sortBy: 'publishedAt',
+      pageSize: '12',
+      apiKey: NEWS_API_KEY,
+    })
+
+    const response = await fetch(`https://newsapi.org/v2/everything?${params.toString()}`)
+    if (!response.ok) {
+      throw new Error(`News API error: ${response.status}`)
+    }
+
+    const payload = await response.json()
+    if (payload.status !== 'ok') {
+      throw new Error(payload.message || 'No se pudieron cargar las noticias.')
+    }
+
+    marketNews.value = (payload.articles || []).map((article) => ({
+      title: String(article.title || 'Sin título'),
+      description: String(article.description || article.content || ''),
+      source: String(article.source?.name || 'Fuente desconocida'),
+      url: String(article.url || '#'),
+      image: article.urlToImage || '',
+      publishedAt: article.publishedAt || '',
+    }))
+    marketNewsLastUpdated.value = new Date().toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+  } catch (err) {
+    marketNews.value = []
+    marketNewsError.value = 'No se pudo cargar NewsAPI. Verifica la API key o restricciones CORS del plan.'
+    console.error('Error cargando noticias de mercado:', err)
+  } finally {
+    marketNewsLoading.value = false
+  }
+}
+
+function switchMarketNewsTab(tab) {
+  if (tab !== 'nasdaq' && tab !== 'sp500') {
+    return
+  }
+
+  if (marketNewsTab.value === tab) {
+    return
+  }
+
+  marketNewsTab.value = tab
+  fetchMarketNews()
+}
 
 function addNewsAlert() {
   const text = newAlertText.value.trim()
@@ -2262,6 +2352,12 @@ function openSection(id) {
 
   closeSidebarOnMobile()
 }
+
+watch(activeSection, (section) => {
+  if (section === 'mercado' && !marketNews.value.length && !marketNewsLoading.value) {
+    fetchMarketNews()
+  }
+})
 </script>
 
 <template>
@@ -2333,7 +2429,13 @@ function openSection(id) {
         <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'noticias' }" @click="openSection('noticias')">
             <span class="sidebar-icon">🔔</span>
-            <span class="sidebar-label">Alertas Nasdaq</span>
+            <span class="sidebar-label">Alertas Noticias</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'mercado' }" @click="openSection('mercado')">
+            <span class="sidebar-icon">📰</span>
+            <span class="sidebar-label">Noticias</span>
           </button>
         </li>
         <li>
@@ -3044,7 +3146,7 @@ function openSection(id) {
         <div class="noticias-head">
           <div class="noticias-head-left">
             <p class="noticias-eyebrow">ALERTAS</p>
-            <h2 class="noticias-title">Noticias Nasdaq</h2>
+            <h2 class="noticias-title">Alertas de Noticias</h2>
             <p class="noticias-sub">Crea alertas manuales para CPI, Powell, NFP o cualquier evento que quieras vigilar y la app te avisa 15 minutos antes.</p>
             <p class="noticias-info">Tus recordatorios manuales avisarán por notificación y voz 15 minutos antes.</p>
             <button class="ghost-button noticias-pause-btn" @click="toggleAlertsPause">
@@ -3087,6 +3189,67 @@ function openSection(id) {
             <button class="eval-remove-btn" @click="removeNewsAlert(alert.id)">×</button>
           </div>
         </div>
+      </section>
+
+      <section v-show="activeSection === 'mercado'" id="mercado" class="noticias-panel">
+        <section class="market-news-wrap">
+          <div class="market-news-head">
+            <div>
+              <p class="noticias-eyebrow">MERCADO EN VIVO</p>
+              <h3 class="market-news-title">Noticias {{ getMarketNewsTitle() }}</h3>
+              <p class="market-news-sub">Fuente: NewsAPI.org · Actualización {{ marketNewsLastUpdated || 'pendiente' }}</p>
+            </div>
+            <div class="market-news-actions">
+              <div class="market-news-tabs">
+                <button
+                  class="market-news-tab"
+                  :class="{ 'market-news-tab--active': marketNewsTab === 'nasdaq' }"
+                  @click="switchMarketNewsTab('nasdaq')"
+                >
+                  Nasdaq
+                </button>
+                <button
+                  class="market-news-tab"
+                  :class="{ 'market-news-tab--active': marketNewsTab === 'sp500' }"
+                  @click="switchMarketNewsTab('sp500')"
+                >
+                  S&P 500
+                </button>
+              </div>
+              <button class="ghost-button" :disabled="marketNewsLoading" @click="fetchMarketNews">
+                {{ marketNewsLoading ? 'Cargando...' : 'Actualizar' }}
+              </button>
+            </div>
+          </div>
+
+          <p v-if="marketNewsError" class="error-banner">{{ marketNewsError }}</p>
+
+          <div v-if="marketNewsLoading" class="market-news-loading">
+            Cargando noticias de mercado...
+          </div>
+
+          <div v-else-if="marketNews.length" class="market-news-grid">
+            <a
+              v-for="item in marketNews"
+              :key="`${item.url}-${item.publishedAt}`"
+              class="market-news-card"
+              :href="item.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img v-if="item.image" :src="item.image" :alt="item.title" class="market-news-image" />
+              <div class="market-news-content">
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.description || 'Abrir artículo para más detalles.' }}</p>
+                <span>{{ item.source }} · {{ formatMarketNewsDate(item.publishedAt) }}</span>
+              </div>
+            </a>
+          </div>
+
+          <div v-else class="market-news-empty">
+            No hay artículos disponibles en este momento para {{ getMarketNewsTitle() }}.
+          </div>
+        </section>
       </section>
 
       <!-- ── Teoría Prospectiva ── -->

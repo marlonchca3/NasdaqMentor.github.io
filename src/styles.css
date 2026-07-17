@@ -2548,6 +2548,128 @@ h1 {
   font-weight: 600;
 }
 
+.market-news-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: rgba(6, 14, 32, 0.92);
+  border-radius: 16px;
+  border: 1px solid rgba(100, 130, 200, 0.18);
+}
+
+.market-news-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.market-news-title {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #edf4ff;
+}
+
+.market-news-sub {
+  margin: 4px 0 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.market-news-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-news-tabs {
+  display: inline-flex;
+  background: rgba(19, 37, 70, 0.88);
+  border-radius: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  padding: 3px;
+}
+
+.market-news-tab {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #9ec8ff;
+  font-size: 0.84rem;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.market-news-tab--active {
+  background: linear-gradient(135deg, #1f6feb, #2ea8ff);
+  color: #fff;
+}
+
+.market-news-loading,
+.market-news-empty {
+  border: 1px dashed rgba(120, 156, 214, 0.26);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text-soft);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.market-news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.market-news-card {
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 20, 44, 0.9);
+  border: 1px solid rgba(95, 137, 210, 0.24);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.market-news-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(96, 165, 250, 0.56);
+}
+
+.market-news-image {
+  width: 100%;
+  height: 128px;
+  object-fit: cover;
+}
+
+.market-news-content {
+  padding: 10px 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.market-news-content strong {
+  color: #edf4ff;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.market-news-content p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.market-news-content span {
+  color: #86b6f5;
+  font-size: 0.74rem;
+}
+
 .noticias-form {
   display: grid;
   grid-template-columns: 1fr auto auto auto;
@@ -2622,6 +2744,25 @@ h1 {
 }
 
 @media (max-width: 768px) {
+  .market-news-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .market-news-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .market-news-tabs {
+    width: 100%;
+  }
+
+  .market-news-tab {
+    flex: 1;
+  }
+
   .noticias-form {
     grid-template-columns: 1fr;
   }
@@ -3025,8 +3166,10 @@ h1 {
 :root[data-theme='light'] .eval-table-wrap,
 :root[data-theme='light'] .eval-stat-card,
 :root[data-theme='light'] .noticias-head,
+:root[data-theme='light'] .market-news-wrap,
 :root[data-theme='light'] .noticias-form,
 :root[data-theme='light'] .noticias-item,
+:root[data-theme='light'] .market-news-card,
 :root[data-theme='light'] .sync-panel,
 :root[data-theme='light'] .pomodoro-panel,
 :root[data-theme='light'] .eval-panel,
@@ -3092,6 +3235,8 @@ h1 {
 :root[data-theme='light'] .intro-feature p,
 :root[data-theme='light'] .sync-state,
 :root[data-theme='light'] .noticias-item-info span,
+:root[data-theme='light'] .market-news-sub,
+:root[data-theme='light'] .market-news-content p,
 :root[data-theme='light'] .calendar-week-summary span,
 :root[data-theme='light'] .calendar-week-summary small {
   color: #7a4a2e;
@@ -3196,6 +3341,8 @@ h1 {
 :root[data-theme='light'] .calendar-month-label,
 :root[data-theme='light'] .calendar-cell-content strong,
 :root[data-theme='light'] .noticias-item-info strong,
+:root[data-theme='light'] .market-news-title,
+:root[data-theme='light'] .market-news-content strong,
 :root[data-theme='light'] .compliance-card strong,
 :root[data-theme='light'] .pomodoro-head h2,
 :root[data-theme='light'] .progress-header strong,
@@ -3211,8 +3358,23 @@ h1 {
 :root[data-theme='light'] .pomodoro-eyebrow,
 :root[data-theme='light'] .pomodoro-badges span,
 :root[data-theme='light'] .noticias-active-badge span,
+:root[data-theme='light'] .market-news-content span,
 :root[data-theme='light'] .drag-handle {
   color: #6e2c11;
+}
+
+:root[data-theme='light'] .market-news-tabs {
+  background: rgba(255, 235, 206, 0.9);
+  border-color: rgba(166, 83, 29, 0.3);
+}
+
+:root[data-theme='light'] .market-news-tab {
+  color: #8f3f15;
+}
+
+:root[data-theme='light'] .market-news-tab--active {
+  background: linear-gradient(135deg, #ca4f16, #ef8427);
+  color: #fff7ef;
 }
 
 :root[data-theme='light'] .pomodoro-badges span,
