@@ -4,6 +4,7 @@ import { gsap } from 'gsap'
 import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
 import ProspectTest from './ProspectTest.vue'
+import BigFiveTest from './BigFiveTest.vue'
 import {
   addDoc,
   collection,
@@ -1039,6 +1040,7 @@ const evalWinRate = computed(() => {
 // ── Checklist emocional & Disciplina ──────────────────────────────
 const emotionalState = ref(null)   // 'calmado' | 'ansioso' | null
 const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
+const showBigFiveTest = ref(false)
 const weeklyDisciplineBarRef = ref(null)
 const operationLockUntil = ref(0)
 
@@ -1086,6 +1088,34 @@ function selectTradeCompliance(value) {
   } else if (tradeCompliance.value === 'fallo') {
     speak('Alerta de disciplina. Detén la operativa y revisa tus reglas.')
     applyOperationLock(20)
+  }
+}
+
+function openBigFiveTest() {
+  showBigFiveTest.value = true
+}
+
+function closeBigFiveTest() {
+  showBigFiveTest.value = false
+}
+
+async function saveBigFiveResults(testData) {
+  if (user.value) {
+    try {
+      await addDoc(collection(db, 'users', user.value.uid, 'bigfive_tests'), {
+        results: testData.results,
+        timestamp: testData.timestamp,
+        createdAt: serverTimestamp(),
+      })
+      speak('Resultados del test guardados correctamente.')
+    } catch (err) {
+      console.error('Error al guardar resultados del test:', err)
+    }
+  } else {
+    // Guardar en localStorage para usuarios no autenticados
+    const testResults = JSON.parse(localStorage.getItem('bigfive_tests') || '[]')
+    testResults.push(testData)
+    localStorage.setItem('bigfive_tests', JSON.stringify(testResults))
   }
 }
 
@@ -2379,6 +2409,12 @@ function openSection(id) {
             <span class="sidebar-label">Libros</span>
           </a>
         </li>
+        <li>
+          <button class="sidebar-item" @click="openBigFiveTest">
+            <span class="sidebar-icon">🧠</span>
+            <span class="sidebar-label">Test Emocional</span>
+          </button>
+        </li>
       </ul>
     </nav>
 
@@ -3130,6 +3166,18 @@ function openSection(id) {
         </div>
 
         <button class="intro-cta" @click="closeIntro">Comenzar a usar la app →</button>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- Big Five Test Modal -->
+  <Transition name="fade">
+    <div v-if="showBigFiveTest" class="modal-overlay" @click.self="closeBigFiveTest">
+      <div class="modal-content big-five-modal">
+        <BigFiveTest 
+          @close="closeBigFiveTest"
+          @save="saveBigFiveResults"
+        />
       </div>
     </div>
   </Transition>
