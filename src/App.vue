@@ -1873,6 +1873,37 @@ function formatMarketNewsDate(isoDate) {
   }).format(parsed)
 }
 
+async function fetchNewsApiWithFallback(newsApiUrl) {
+  const encodedUrl = encodeURIComponent(newsApiUrl)
+  const endpoints = [
+    newsApiUrl,
+    `https://corsproxy.io/?${encodedUrl}`,
+    `https://api.allorigins.win/raw?url=${encodedUrl}`,
+  ]
+
+  let lastError = null
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const payload = await response.json()
+      if (payload?.status !== 'ok') {
+        throw new Error(payload?.message || 'Respuesta inválida de NewsAPI')
+      }
+
+      return payload
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  throw lastError || new Error('No se pudo consultar NewsAPI con fallback.')
+}
+
 async function fetchMarketNews() {
   marketNewsError.value = ''
   marketNewsLoading.value = true
@@ -1886,16 +1917,8 @@ async function fetchMarketNews() {
       pageSize: '12',
       apiKey: NEWS_API_KEY,
     })
-
-    const response = await fetch(`https://newsapi.org/v2/everything?${params.toString()}`)
-    if (!response.ok) {
-      throw new Error(`News API error: ${response.status}`)
-    }
-
-    const payload = await response.json()
-    if (payload.status !== 'ok') {
-      throw new Error(payload.message || 'No se pudieron cargar las noticias.')
-    }
+    const newsApiUrl = `https://newsapi.org/v2/everything?${params.toString()}`
+    const payload = await fetchNewsApiWithFallback(newsApiUrl)
 
     marketNews.value = (payload.articles || []).map((article) => ({
       title: String(article.title || 'Sin título'),
@@ -1913,7 +1936,7 @@ async function fetchMarketNews() {
     })
   } catch (err) {
     marketNews.value = []
-    marketNewsError.value = 'No se pudo cargar NewsAPI. Verifica la API key o restricciones CORS del plan.'
+    marketNewsError.value = 'No se pudo cargar NewsAPI (bloqueo CORS o límite del plan). Intenta de nuevo en unos segundos.'
     console.error('Error cargando noticias de mercado:', err)
   } finally {
     marketNewsLoading.value = false
