@@ -2384,6 +2384,7 @@ watch(activeSection, (section) => {
 </script>
 
 <template>
+
   <div class="app-layout">
     <!-- Top Navbar -->
     <header class="topnav">
@@ -2623,13 +2624,34 @@ watch(activeSection, (section) => {
       <p class="helper-text">Cada tarea debe tener maximo 12 palabras.</p>
       <p v-if="taskError" class="error-banner" style="margin-top: 0.5rem;">{{ taskError }}</p>
 
-      <div class="progress-header">
-        <span>Progreso</span>
-        <strong>{{ progressValue }}%</strong>
-      </div>
+      <div class="progress-section">
+        <div class="progress-header">
+          <span>Progreso</span>
+          <strong>{{ progressValue }}%</strong>
+        </div>
 
-      <div class="progress-track">
-        <div ref="progressFillRef" class="progress-fill"></div>
+        <div class="progress-3d">
+          <div
+            ref="progressFillRef"
+            class="progress-3d__fill"
+            :style="{ width: `${progressValue}%` }"
+          >
+            <div class="progress-3d__shine"></div>
+          </div>
+
+          <div class="progress-3d__markers">
+            <span
+              v-for="number in maxTasks"
+              :key="number"
+              class="progress-marker"
+              :class="{ completed: number <= completedCount }"
+            ></span>
+          </div>
+        </div>
+
+        <div class="progress-caption">
+          {{ completedCount }} de {{ maxTasks }} tareas completadas
+        </div>
       </div>
 
       <div v-if="tasks.length" class="task-list">
