@@ -641,7 +641,16 @@ onUnmounted(() => {
 const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
 const maxDailyLossUSD = ref(15)
+const evalCalculatorBalance = ref(0)
+const evalCalculatorTarget = ref(0)
+const evalCalculatorRiskPct = ref(1)
+const evalCalculatorTrades = ref(1)
 const tradesList = ref([])
+
+function parseCalcNumber(value) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
 const pendingTrades = ref([])
 const savingTrade = ref(false)
 const riskDebug = ref({
@@ -935,6 +944,34 @@ async function clearAllTrades() {
   clearTradeForm()
 }
 
+const evalCalculatorNeededGain = computed(() => Math.max(0, evalCalculatorTarget.value - evalCalculatorBalance.value))
+const evalCalculatorNeededGainPct = computed(() => {
+  if (!evalCalculatorBalance.value) return 0
+  return (evalCalculatorNeededGain.value / evalCalculatorBalance.value) * 100
+})
+const evalCalculatorRiskAmount = computed(() => {
+  if (!evalCalculatorBalance.value) return 0
+  return evalCalculatorBalance.value * (evalCalculatorRiskPct.value / 100)
+})
+const evalCalculatorRewardPerTrade = computed(() => {
+  const trades = Math.max(1, Math.round(evalCalculatorTrades.value || 1))
+  if (!trades) return 0
+  return evalCalculatorNeededGain.value / trades
+})
+const evalCalculatorRequiredRr = computed(() => {
+  const riskAmount = evalCalculatorRiskAmount.value
+  if (!riskAmount) return 0
+  return evalCalculatorRewardPerTrade.value / riskAmount
+})
+const evalCalculatorRequiredRewardPct = computed(() => {
+  if (!evalCalculatorBalance.value) return 0
+  return (evalCalculatorRewardPerTrade.value / evalCalculatorBalance.value) * 100
+})
+const evalCalculatorRrLabel = computed(() => {
+  const rr = evalCalculatorRequiredRr.value
+  if (!Number.isFinite(rr)) return '—'
+  return `${rr.toFixed(2)}:1`
+})
 const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
 const evalTotalUSD = computed(() =>
   tradesList.value.reduce(
@@ -2429,19 +2466,13 @@ watch(activeSection, (section) => {
         <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openSection('evaluacion')">
             <span class="sidebar-icon">📊</span>
-            <span class="sidebar-label">Evaluación</span>
+            <span class="sidebar-label">Diario de trading</span>
           </button>
         </li>
         <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'pomodoro' }" @click="openSection('pomodoro')">
             <span class="sidebar-icon">⏱</span>
             <span class="sidebar-label">Pomodoro</span>
-          </button>
-        </li>
-        <li>
-          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'sesiones' }" @click="openSection('sesiones')">
-            <span class="sidebar-icon">🕒</span>
-            <span class="sidebar-label">Sesiones</span>
           </button>
         </li>
         <li>
@@ -2804,6 +2835,62 @@ watch(activeSection, (section) => {
             <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185' }"></div>
           </div>
         </div>
+        <div class="eval-calculator-card">
+          <div class="filter-section-head">
+            <div>
+              <p class="filter-eyebrow">Calculadora de objetivo</p>
+              <h2 class="filter-title">¿Cuánto necesitas operar para pasar la cuenta?</h2>
+              <p class="filter-copy">Ingresa tu saldo, el objetivo, el riesgo por trade y la cantidad de trades para calcular cuánto necesitas para pasar la cuenta.</p>
+            </div>
+          </div>
+
+          <div class="calc-grid">
+            <label class="calc-field">
+              <span>Saldo actual ($)</span>
+              <input :value="evalCalculatorBalance" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorBalance = parseCalcNumber($event.target.value)" />
+            </label>
+            <label class="calc-field">
+              <span>Objetivo ($)</span>
+              <input :value="evalCalculatorTarget" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorTarget = parseCalcNumber($event.target.value)" />
+            </label>
+            <label class="calc-field">
+              <span>Riesgo por trade (%)</span>
+              <input :value="evalCalculatorRiskPct" class="eval-control" type="number" min="0.1" step="0.1" @input="evalCalculatorRiskPct = parseCalcNumber($event.target.value)" />
+            </label>
+            <label class="calc-field">
+              <span>Trades para lograrlo</span>
+              <input :value="evalCalculatorTrades" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorTrades = parseCalcNumber($event.target.value)" />
+            </label>
+          </div>
+
+          <div class="calc-results">
+            <div class="calc-result-card">
+              <span>Ganancia necesaria</span>
+              <strong>${{ evalCalculatorNeededGain.toFixed(2) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Crecer el saldo actual para pasar el objetivo</span>
+              <strong>{{ evalCalculatorNeededGainPct.toFixed(2) }}%</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Riesgo por trade</span>
+              <strong>${{ evalCalculatorRiskAmount.toFixed(2) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>RRR requerido por trade</span>
+              <strong>{{ evalCalculatorRrLabel }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Ganancia por trade</span>
+              <strong>${{ evalCalculatorRewardPerTrade.toFixed(2) }}</strong>
+            </div>
+          </div>
+
+          <p class="calc-footnote">
+            Para pasar tu cuenta en {{ Math.max(1, Math.round(evalCalculatorTrades || 1)) }} trade(s), necesitas un objetivo de {{ evalCalculatorRequiredRewardPct.toFixed(2) }}% por operación, con un RRR de {{ evalCalculatorRrLabel }}. El riesgo por trade queda alineado con el porcentaje que hayas definido para mantener un plan claro y disciplinado.
+          </p>
+        </div>
+
         <div class="eval-journal-top">
           <input v-model="tradeDate" class="eval-control" type="date" />
           <select v-model="tradeSession" class="eval-control">
@@ -3043,110 +3130,6 @@ watch(activeSection, (section) => {
           </button>
           <button class="pomodoro-secondary" @click="skipPhase">Saltar fase</button>
           <button class="pomodoro-secondary" @click="resetPomodoro">Reiniciar</button>
-        </div>
-      </section>
-
-      <section v-show="activeSection === 'sesiones'" id="sesiones" class="sesiones-panel">
-        <div class="sesiones-head">
-          <div>
-            <p class="sesiones-eyebrow">OPERATIVA</p>
-            <h2 class="sesiones-title">Horario de sesión + equipo</h2>
-            <p class="sesiones-copy">Opera solo dentro de tus franjas horarias. Fuera de horario, la app te marca en modo inactivo.</p>
-          </div>
-          <div class="sesiones-clock-wrap">
-            <span class="sesiones-clock-label">Hora local</span>
-            <strong class="sesiones-clock-value">{{ sessionClockText }}</strong>
-          </div>
-        </div>
-
-        <div class="sesion-status-row">
-          <button
-            class="session-live-pill"
-            :class="canOperateNow ? 'session-live-pill--on' : 'session-live-pill--off'"
-            type="button"
-            disabled
-          >
-            {{ canOperateNow ? '🟢 En ventana de operación' : '🔴 Fuera de ventana' }}
-          </button>
-          <p class="session-next-copy">{{ sessionStatusLabel }} · {{ nextTradingSlotText }}</p>
-        </div>
-
-        <div class="session-grid">
-          <article v-for="slot in scheduleWithState" :key="slot.id" class="session-slot-card" :class="{ 'session-slot-card--active': slot.active }">
-            <div class="session-slot-top">
-              <strong>{{ slot.label }}</strong>
-              <span class="session-slot-state" :class="slot.active ? 'session-slot-state--on' : 'session-slot-state--off'">
-                {{ slot.active ? 'Activa' : 'Inactiva' }}
-              </span>
-            </div>
-            <div class="session-slot-inputs">
-              <label>
-                Inicio
-                <input
-                  :value="slot.start"
-                  type="time"
-                  class="eval-control session-time-input"
-                  @input="updateSessionTime(slot.id, 'start', $event.target.value)"
-                  @change="updateSessionTime(slot.id, 'start', $event.target.value)"
-                />
-              </label>
-              <label>
-                Fin
-                <input
-                  :value="slot.end"
-                  type="time"
-                  class="eval-control session-time-input"
-                  @input="updateSessionTime(slot.id, 'end', $event.target.value)"
-                  @change="updateSessionTime(slot.id, 'end', $event.target.value)"
-                />
-              </label>
-            </div>
-            <p v-if="slot.invalid" class="session-slot-error">Horario inválido, usa formato HH:MM.</p>
-          </article>
-        </div>
-
-        <div class="team-room">
-          <div class="team-room-head">
-            <div>
-              <p class="team-room-eyebrow">EQUIPO</p>
-              <h3>Chat / comentarios de sesión</h3>
-            </div>
-            <button
-              class="team-presence-btn"
-              :class="sessionPresence ? 'team-presence-btn--on' : 'team-presence-btn--off'"
-              @click="toggleSessionPresence"
-            >
-              {{ sessionPresence ? '🟢 Activo en sesión' : '🔴 Inactivo en sesión' }}
-            </button>
-          </div>
-
-          <div class="team-comment-form">
-            <input
-              v-model="teamCommentInput"
-              class="eval-control"
-              type="text"
-              maxlength="220"
-              placeholder="Escribe un comentario para el equipo"
-              @keydown.enter="sendTeamComment"
-            />
-            <button class="primary-button" @click="sendTeamComment">Enviar</button>
-          </div>
-          <p v-if="teamCommentError" class="error-banner" style="margin-top: 0.5rem;">{{ teamCommentError }}</p>
-
-          <div v-if="!teamComments.length" class="team-comments-empty">
-            Aún no hay comentarios del equipo.
-          </div>
-          <div v-else class="team-comments-list">
-            <article v-for="comment in teamComments" :key="comment.id" class="team-comment-item">
-              <div class="team-comment-head">
-                <strong>{{ comment.author }}</strong>
-                <span class="team-comment-meta">
-                  {{ comment.active ? '🟢 activo' : '🔴 inactivo' }} · {{ formatTeamCommentDate(comment.createdAt) }}
-                </span>
-              </div>
-              <p>{{ comment.text }}</p>
-            </article>
-          </div>
         </div>
       </section>
 

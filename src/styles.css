@@ -169,6 +169,74 @@
   }
 }
 
+.eval-calculator-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(8, 15, 30, 0.95));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.calc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.calc-field span {
+  font-weight: 600;
+}
+
+.calc-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.calc-result-card {
+  padding: 0.85rem;
+  border-radius: 14px;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+}
+
+.calc-result-card span {
+  display: block;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-bottom: 0.3rem;
+}
+
+.calc-result-card strong {
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.calc-footnote {
+  margin-top: 0.9rem;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .calc-grid,
+  .calc-results {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Sidebar ──────────────────────────────────────────────── */
 .sidebar {
   position: fixed;
@@ -1653,12 +1721,24 @@ h1 {
 }
 
 .objetivo-progress-track {
+  position: relative;
   width: 100%;
-  height: 16px;
+  height: 22px;
   margin-top: 6px;
-  border-radius: 8px;
   overflow: hidden;
-  background: #222b3a;
+  border: 1px solid rgba(87, 146, 255, 0.3);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      #020817 0%,
+      #071124 45%,
+      #12203d 100%
+    );
+  box-shadow:
+    inset 0 4px 7px rgba(0, 0, 0, 0.8),
+    inset 0 -3px 5px rgba(95, 140, 220, 0.18),
+    0 7px 14px rgba(0, 0, 0, 0.3);
 }
 
 .objetivo-progress-label {
@@ -1671,8 +1751,42 @@ h1 {
 }
 
 .objetivo-progress-fill {
+  position: relative;
   height: 100%;
-  border-radius: 8px;
+  min-width: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      180deg,
+      #8af4ff 0%,
+      #25d8db 30%,
+      #19d36b 72%,
+      #079c48 100%
+    );
+  box-shadow:
+    inset 0 3px 4px rgba(255, 255, 255, 0.5),
+    inset 0 -4px 6px rgba(0, 70, 60, 0.45),
+    0 0 18px rgba(29, 220, 145, 0.55);
+  transition:
+    width 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease;
+}
+
+.objetivo-progress-fill::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2%;
+  width: 96%;
+  height: 35%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: progressShine 2.5s linear infinite;
 }
 
 .filter-section-head {
@@ -3716,8 +3830,7 @@ h1 {
 @media (max-width: 768px) {
   .modal-content {
     max-height: 95vh;
-    }
     margin: 0;
   }
-
+}
 
