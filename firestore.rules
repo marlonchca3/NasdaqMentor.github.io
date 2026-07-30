@@ -31,6 +31,29 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // Resultados del test emocional del usuario
+    match /users/{userId}/bigfive_tests/{testId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Sala compartida de comentarios. Cualquier usuario autenticado con Google
+    // puede leer y crear comentarios; solo el autor puede modificarlos o borrarlos.
+    match /sessionRoomComments/{commentId} {
+      allow read: if isSignedInWithGoogle();
+      allow create: if isSignedInWithGoogle()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 220
+        && request.resource.data.author is string
+        && request.resource.data.author.size() > 0
+        && request.resource.data.author.size() <= 80
+        && request.resource.data.active is bool
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if isSignedInWithGoogle()
+        && resource.data.uid == request.auth.uid;
+    }
+
     // Denegar todo lo demas por defecto
     match /{document=**} {
       allow read, write: if false;

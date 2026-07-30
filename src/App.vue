@@ -1884,7 +1884,7 @@ const marketNewsLoading = ref(false)
 const marketNewsError = ref('')
 const marketNewsTab = ref('nasdaq')
 const marketNewsLastUpdated = ref('')
-const NEWS_API_KEY = import.meta.env.VITE_NEWSAPI_KEY || '41984d1199fa487db515097f35abaced'
+const NEWS_API_KEY = import.meta.env.VITE_NEWSAPI_KEY || ''
 
 const marketNewsQueries = {
   nasdaq: '(NASDAQ OR "Nasdaq Composite" OR NDX OR QQQ) AND (stock OR market OR earnings)',
@@ -1943,6 +1943,13 @@ async function fetchNewsApiWithFallback(newsApiUrl) {
 
 async function fetchMarketNews() {
   marketNewsError.value = ''
+
+  if (!NEWS_API_KEY) {
+    marketNews.value = []
+    marketNewsError.value = 'Configura VITE_NEWSAPI_KEY en .env para cargar noticias de mercado.'
+    return
+  }
+
   marketNewsLoading.value = true
 
   try {
