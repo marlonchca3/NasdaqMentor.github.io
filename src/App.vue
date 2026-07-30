@@ -643,7 +643,8 @@ const evalObjetivo = ref(58000)
 const maxDailyLossUSD = ref(15)
 const evalCalculatorBalance = ref(0)
 const evalCalculatorTarget = ref(0)
-const evalCalculatorRiskPct = ref(1)
+// Riesgo por trade en USD (antes era porcentaje)
+const evalCalculatorRiskAmount = ref(1)
 const evalCalculatorTrades = ref(1)
 const tradesList = ref([])
 
@@ -949,10 +950,7 @@ const evalCalculatorNeededGainPct = computed(() => {
   if (!evalCalculatorBalance.value) return 0
   return (evalCalculatorNeededGain.value / evalCalculatorBalance.value) * 100
 })
-const evalCalculatorRiskAmount = computed(() => {
-  if (!evalCalculatorBalance.value) return 0
-  return evalCalculatorBalance.value * (evalCalculatorRiskPct.value / 100)
-})
+// nota: `evalCalculatorRiskAmount` ahora es un ref en USD, no un cálculo porcentual
 const evalCalculatorRewardPerTrade = computed(() => {
   const trades = Math.max(1, Math.round(evalCalculatorTrades.value || 1))
   if (!trades) return 0
@@ -2861,8 +2859,8 @@ watch(activeSection, (section) => {
               <input :value="evalCalculatorTarget" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorTarget = parseCalcNumber($event.target.value)" />
             </label>
             <label class="calc-field">
-              <span>Riesgo por trade (%)</span>
-              <input :value="evalCalculatorRiskPct" class="eval-control" type="number" min="0.1" step="0.1" @input="evalCalculatorRiskPct = parseCalcNumber($event.target.value)" />
+              <span>Riesgo por trade ($)</span>
+              <input :value="evalCalculatorRiskAmount" class="eval-control" type="number" min="0.1" step="0.1" @input="evalCalculatorRiskAmount = parseCalcNumber($event.target.value)" />
             </label>
             <label class="calc-field">
               <span>Trades para lograrlo</span>
@@ -2894,7 +2892,7 @@ watch(activeSection, (section) => {
           </div>
 
           <p class="calc-footnote">
-            Para pasar tu cuenta en {{ Math.max(1, Math.round(evalCalculatorTrades || 1)) }} trade(s), necesitas un objetivo de {{ evalCalculatorRequiredRewardPct.toFixed(2) }}% por operación, con un RRR de {{ evalCalculatorRrLabel }}. El riesgo por trade queda alineado con el porcentaje que hayas definido para mantener un plan claro y disciplinado.
+            Para pasar tu cuenta en {{ Math.max(1, Math.round(evalCalculatorTrades || 1)) }} trade(s), necesitas un objetivo de {{ evalCalculatorRequiredRewardPct.toFixed(2) }}% por operación, con un RRR de {{ evalCalculatorRrLabel }}. El riesgo por trade se define en dólares según el valor indicado más arriba.
           </p>
         </div>
 
