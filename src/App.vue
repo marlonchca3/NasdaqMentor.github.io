@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
 import ProspectTest from './ProspectTest.vue'
 import BigFiveTest from './BigFiveTest.vue'
+import Dashboard from './Dashboard.vue'
 import {
   addDoc,
   collection,
@@ -2836,6 +2837,12 @@ watch(activeSection, (section) => {
           </button>
         </li>
         <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'dashboard' }" @click="openSection('dashboard')">
+            <span class="sidebar-icon">📈</span>
+            <span class="sidebar-label">Dashboard</span>
+          </button>
+        </li>
+        <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openSection('evaluacion')">
             <span class="sidebar-icon">📊</span>
             <span class="sidebar-label">Diario de trading</span>
@@ -3085,6 +3092,19 @@ watch(activeSection, (section) => {
       <div v-else class="empty-state">
         <p>No hay tareas todavia. Inicia con una meta concreta para hoy.</p>
       </div>
+      </section>
+
+      <section v-show="activeSection === 'dashboard'" id="dashboard" class="dashboard-panel">
+        <div class="hero-row">
+          <div>
+            <p class="eyebrow">Dashboard</p>
+            <h1>Análisis de Operaciones</h1>
+            <p class="subcopy">
+              Visualiza tus métricas de trading del mes para mejorar tu rendimiento.
+            </p>
+          </div>
+        </div>
+        <Dashboard :trades="monthTrades" :one-r="evalOneR" />
       </section>
 
       <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">

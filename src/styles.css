@@ -1665,6 +1665,14 @@ h1 {
   border: 1px solid rgba(114, 146, 207, 0.18);
 }
 
+.dashboard-panel {
+  margin-top: 22px;
+  padding: 20px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(8, 18, 44, 0.97), rgba(10, 19, 43, 0.94));
+  border: 1px solid rgba(114, 146, 207, 0.18);
+}
+
 /* ── Filter sections (emotional + compliance) ───────────────────── */
 .filter-section {
   padding: 18px 0;
