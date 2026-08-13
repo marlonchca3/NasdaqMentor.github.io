@@ -2,4 +2,8 @@
   "firestore": {
     "rules": "firestore.rules"
   }
+  ,
+  "storage": {
+    "rules": "firebase.storage.rules"
+  }
 }

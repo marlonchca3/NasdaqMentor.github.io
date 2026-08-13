@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
@@ -20,6 +20,7 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
+import { getStorage, ref as sRef, uploadString, getDownloadURL } from 'firebase/storage'
 import { auth, db, loginWithGoogle, logout } from './firebase'
 
 const maxTasks = 10
@@ -647,6 +648,13 @@ const evalCalculatorTarget = ref(0)
 const evalCalculatorRiskAmount = ref(1)
 const evalCalculatorTrades = ref(1)
 const tradesList = ref([])
+const pnlChartRef = ref(null)
+const chartFileInput = ref(null)
+const chartsList = ref([])
+const guestCharts = ref([])
+const showChartsModal = ref(false)
+const modalCharts = ref([])
+const previewChart = ref(null)
 
 function parseCalcNumber(value) {
   const parsed = Number(value)
@@ -654,6 +662,7 @@ function parseCalcNumber(value) {
 }
 const pendingTrades = ref([])
 const savingTrade = ref(false)
+const savingChart = ref(false)
 const riskDebug = ref({
   source: 'idle',
   checkedAt: '',
@@ -673,6 +682,7 @@ const tradeNote = ref('')
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
 let unsubscribeEvalTrades = null
+let unsubscribeEvalCharts = null
 let evalSaveTimer = null
 
 const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
@@ -733,6 +743,24 @@ function dateKey(value) {
   const d = normalizeDate(value)
   if (!d) return ''
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function chartsForDate(date) {
+  const key = dateKey(date)
+  const fromUser = chartsList.value.filter((c) => dateKey(c.createdAt) === key).map((c) => ({
+    id: c.id,
+    url: c.url,
+    name: c.originalName || c.filename || 'chart.png',
+    createdAt: c.createdAt,
+  }))
+  const fromGuest = guestCharts.value.filter((c) => dateKey(c.createdAt) === key).map((c) => ({
+    id: c.id,
+    // prefer remote URL, fallback to stored dataUrl or thumbnail
+    url: c.url || c.dataUrl || c.thumb || null,
+    name: c.originalName || c.name || 'upload.png',
+    createdAt: c.createdAt,
+  }))
+  return [...fromUser, ...fromGuest]
 }
 
 const monthLabel = computed(() =>
@@ -1274,6 +1302,28 @@ function loadEval() {
   } catch {
     // ignore
   }
+  // load guest charts from localStorage
+  loadGuestCharts()
+}
+
+function loadGuestCharts() {
+  try {
+    const raw1 = localStorage.getItem('nasdaq-mentor-uploaded-charts')
+    const raw2 = localStorage.getItem('nasdaq-mentor-saved-charts')
+    const arr1 = raw1 ? JSON.parse(raw1) : []
+    const arr2 = raw2 ? JSON.parse(raw2) : []
+    // normalize to same shape: { id, createdAt: Date, dataUrl, originalName }
+    const merged = [...arr1, ...arr2].map((c) => ({
+      id: c.id || `guest-${Date.now()}`,
+      createdAt: normalizeDate(c.createdAt) || normalizeDate(new Date()),
+      // prefer full url, then legacy dataUrl, then thumbnail `thumb`
+      dataUrl: c.dataUrl || c.url || c.thumb || null,
+      originalName: c.name || c.originalName || 'upload.png',
+    }))
+    guestCharts.value = merged
+  } catch (err) {
+    guestCharts.value = []
+  }
 }
 
 function persistEval() {
@@ -1296,6 +1346,146 @@ function persistEvalTrades() {
   )
 }
 
+async function createThumbnailFromDataUrl(dataUrl, maxWidth = 300) {
+  return await new Promise((resolve) => {
+    try {
+      const img = new Image()
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const thumbDataUrl = canvas.toDataURL('image/png', 0.8)
+        resolve(thumbDataUrl)
+      }
+      img.onerror = () => resolve(null)
+      img.src = dataUrl
+    } catch (e) {
+      resolve(null)
+    }
+  })
+}
+
+async function savePnlChart() {
+  if (savingChart.value) return
+  savingChart.value = true
+  try {
+    await nextTick()
+    if (!pnlChartRef.value || typeof pnlChartRef.value.exportChartImage !== 'function') {
+      console.warn('PnlChart export function not available')
+      return
+    }
+
+    const pngDataUrl = await pnlChartRef.value.exportChartImage()
+    if (!pngDataUrl) {
+      console.warn('No chart image produced')
+      return
+    }
+
+    // Download suppressed: we keep image in localStorage and optionally upload to Storage
+    console.debug('savePnlChart: automatic download suppressed')
+
+    // Save a small thumbnail in localStorage for guests (avoid storing full DataURLs)
+    try {
+      const key = 'nasdaq-mentor-saved-charts'
+      const raw = localStorage.getItem(key)
+      const arr = raw ? JSON.parse(raw) : []
+      const thumb = await createThumbnailFromDataUrl(pngDataUrl, 300)
+      arr.unshift({ id: `chart-${Date.now()}`, createdAt: new Date().toISOString(), thumb })
+      // keep last 50
+      localStorage.setItem(key, JSON.stringify(arr.slice(0, 50)))
+    } catch (err) {
+      console.warn('No se pudo guardar la miniatura en localStorage', err)
+    }
+
+    // If user is logged, upload to Firebase Storage and save record in Firestore
+    if (user.value) {
+      try {
+        const storage = getStorage()
+        const path = `users/${user.value.uid}/charts/pnl-${Date.now()}.png`
+        const storageReference = sRef(storage, path)
+        await uploadString(storageReference, pngDataUrl, 'data_url')
+        const downloadUrl = await getDownloadURL(storageReference)
+        await addDoc(collection(db, 'users', user.value.uid, 'charts'), {
+          url: downloadUrl,
+          filename: path,
+          createdAt: serverTimestamp(),
+        })
+        .then((ref) => console.debug('savePnlChart: chart doc added', ref.id, downloadUrl))
+      } catch (err) {
+        console.error('Error subiendo gráfico a Storage/Firestore:', err)
+      }
+    }
+  } catch (err) {
+    console.error('Error al exportar gráfico:', err)
+  } finally {
+    savingChart.value = false
+  }
+}
+
+function triggerChartFilePicker() {
+  if (!chartFileInput.value) return
+  chartFileInput.value.value = null
+  chartFileInput.value.click()
+}
+
+async function onChartFileSelected(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (savingChart.value) return
+  savingChart.value = true
+  try {
+    // read as data URL
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = (err) => reject(err)
+      reader.readAsDataURL(file)
+    })
+
+    // Local download suppressed (file stored in localStorage and uploaded when logged)
+    console.debug('onChartFileSelected: automatic local download suppressed')
+
+    // Save a small thumbnail in localStorage for guests (avoid storing full DataURLs)
+    try {
+      const key = 'nasdaq-mentor-uploaded-charts'
+      const raw = localStorage.getItem(key)
+      const arr = raw ? JSON.parse(raw) : []
+      const thumb = await createThumbnailFromDataUrl(dataUrl, 300)
+      arr.unshift({ id: `upload-${Date.now()}`, createdAt: new Date().toISOString(), name: file.name, thumb })
+      localStorage.setItem(key, JSON.stringify(arr.slice(0, 50)))
+    } catch (err) {
+      console.warn('No se pudo guardar el archivo en localStorage', err)
+    }
+
+    // If logged, upload to Firebase Storage and register in Firestore
+    if (user.value) {
+      try {
+        const storage = getStorage()
+        const path = `users/${user.value.uid}/uploads/${Date.now()}-${file.name}`
+        const storageRef = sRef(storage, path)
+        await uploadString(storageRef, dataUrl, 'data_url')
+        const downloadUrl = await getDownloadURL(storageRef)
+        await addDoc(collection(db, 'users', user.value.uid, 'charts'), {
+          url: downloadUrl,
+          filename: path,
+          originalName: file.name,
+          createdAt: serverTimestamp(),
+        })
+        .then((ref) => console.debug('onChartFileSelected: chart doc added', ref.id, downloadUrl))
+      } catch (err) {
+        console.error('Error subiendo archivo a Storage/Firestore:', err)
+      }
+    }
+  } catch (err) {
+    console.error('Error leyendo/subiendo archivo:', err)
+  } finally {
+    savingChart.value = false
+  }
+}
+
 function stopEvalSubscription() {
   if (unsubscribeEval) {
     unsubscribeEval()
@@ -1304,6 +1494,11 @@ function stopEvalSubscription() {
   if (unsubscribeEvalTrades) {
     unsubscribeEvalTrades()
     unsubscribeEvalTrades = null
+  }
+
+  if (typeof unsubscribeEvalCharts !== 'undefined' && unsubscribeEvalCharts) {
+    unsubscribeEvalCharts()
+    unsubscribeEvalCharts = null
   }
 
   pendingTrades.value = []
@@ -1325,6 +1520,8 @@ function subscribeToEval(userId) {
         maxDailyLossUSD.value = 15
       }
     }
+  }, (err) => {
+    console.error('subscribeToEval: eval settings snapshot error', err)
   })
 
   unsubscribeEvalTrades = onSnapshot(collection(db, 'users', userId, 'trades'), (snap) => {
@@ -1340,6 +1537,7 @@ function subscribeToEval(userId) {
         rBase: d.data().rBase, // leer el valor de R guardado
         clientId: d.data().clientId ?? null,
         compliance: d.data().compliance ?? null,
+        chartUrl: d.data().chartUrl ?? null,
       }))
       .sort((a, b) => {
         const ta = normalizeDate(a.createdAt)?.getTime() ?? 0
@@ -1355,7 +1553,74 @@ function subscribeToEval(userId) {
         (trade) => !trade.clientId || !confirmedClientIds.has(trade.clientId),
       )
     }
+  }, (err) => {
+    console.error('subscribeToEval: trades snapshot error', err)
   })
+
+  // listen to uploaded charts for this user
+  unsubscribeEvalCharts = onSnapshot(collection(db, 'users', userId, 'charts'), (snap) => {
+    const mapped = snap.docs
+      .map((d) => ({
+        id: d.id,
+        url: d.data().url ?? null,
+        filename: d.data().filename ?? null,
+        originalName: d.data().originalName ?? null,
+        createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
+      }))
+      .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0))
+
+    chartsList.value = mapped
+
+    // For docs that only have a storage filename (legacy or missing url), try to resolve a download URL
+    try {
+      const storage = getStorage()
+      mapped.forEach(async (entry) => {
+        if (!entry.url && entry.filename) {
+          try {
+            const storageRef = sRef(storage, entry.filename)
+            const dl = await getDownloadURL(storageRef)
+            // update the entry in chartsList
+            chartsList.value = chartsList.value.map((c) => (c.id === entry.id ? { ...c, url: dl } : c))
+            // if modal is open and contains this chart, update modalCharts as well so the image appears
+            if (showChartsModal.value && modalCharts.value && modalCharts.value.length) {
+              modalCharts.value = modalCharts.value.map((c) => (c.id === entry.id ? { ...c, url: dl } : c))
+            }
+          } catch (err) {
+            // ignore; leave url null
+            console.debug('subscribeToEval: could not resolve download URL for', entry.filename, err)
+          }
+        }
+      })
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      console.debug('subscribeToEval: charts snapshot, count=', chartsList.value.length, chartsList.value[0])
+    } catch (e) {
+      // ignore
+    }
+  }, (err) => {
+    console.error('subscribeToEval: charts snapshot error', err)
+  })
+}
+
+function openChartsModal(date) {
+  modalCharts.value = chartsForDate(date)
+  showChartsModal.value = true
+}
+
+function closeChartsModal() {
+  showChartsModal.value = false
+  modalCharts.value = []
+}
+
+function openPreview(chart) {
+  previewChart.value = chart
+}
+
+function closePreview() {
+  previewChart.value = null
 }
 
 async function saveEvalSettings() {
@@ -1454,6 +1719,23 @@ async function addTrade() {
     emotional: emotionalState.value,
   }
 
+  // Capturar imagen del chart (si disponible) añadiendo temporalmente el trade al listado
+  let chartImage = null
+  try {
+    const tempId = `tmp-capture-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`
+    tradesList.value.unshift({ id: tempId, ...payload, createdAt: new Date() })
+    await nextTick()
+    if (pnlChartRef.value && typeof pnlChartRef.value.exportChartImage === 'function') {
+      chartImage = await pnlChartRef.value.exportChartImage()
+    }
+    // remover temporal
+    tradesList.value = tradesList.value.filter((t) => t.id !== tempId)
+  } catch (err) {
+    console.error('Error al capturar imagen del chart:', err)
+  }
+
+  payload.chartImage = chartImage
+
   if (user.value) {
     try {
       const snap = await getDocsFromServer(collection(db, 'users', user.value.uid, 'trades'))
@@ -1521,6 +1803,24 @@ async function addTrade() {
     })
 
     try {
+      // If we captured a chart image (data URL), upload to Firebase Storage first
+      if (payload.chartImage) {
+        try {
+          const storage = getStorage()
+          const path = `users/${user.value.uid}/trades/${clientId}/pnl.png`
+          const storageRef = sRef(storage, path)
+          await uploadString(storageRef, payload.chartImage, 'data_url')
+          const downloadUrl = await getDownloadURL(storageRef)
+          payload.chartUrl = downloadUrl
+              console.debug('addTrade: uploaded chart for trade', clientId, downloadUrl)
+          // Remove heavy base64 blob before saving in Firestore
+          delete payload.chartImage
+        } catch (err) {
+          console.error('Error subiendo chart al storage dentro de addTrade:', err)
+          // proceed without chartUrl
+        }
+      }
+
       await addDoc(collection(db, 'users', user.value.uid, 'trades'), {
         ...payload,
         clientId,
@@ -1838,6 +2138,7 @@ onMounted(() => {
     stopTaskSubscription()
     stopEvalSubscription()
     stopTeamCommentsSubscription()
+    console.debug('onAuthStateChanged uid=', firebaseUser?.uid)
     user.value = firebaseUser
     authReady.value = true
 
@@ -2925,6 +3226,8 @@ watch(activeSection, (section) => {
 
         <div class="eval-journal-actions">
           <button class="primary-button" :disabled="isOperationLocked || savingTrade" @click="addTrade">Guardar trade</button>
+          <button class="ghost-button" :disabled="savingChart" @click="triggerChartFilePicker">Subir gráfico</button>
+          <input ref="chartFileInput" type="file" accept="image/*" style="display:none" @change="onChartFileSelected" />
           <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
         </div>
         <p v-if="tradeError" class="error-banner" style="margin-top:0.5em;">{{ tradeError }}</p>
@@ -2969,7 +3272,7 @@ watch(activeSection, (section) => {
           </table>
         </div>
 
-        <PnlChart :trades="tradesList" :one-r="evalOneR" />
+        <PnlChart ref="pnlChartRef" :trades="tradesList" :one-r="evalOneR" />
 
         <div class="eval-calendar-head">
           <div>
@@ -3024,7 +3327,7 @@ watch(activeSection, (section) => {
               today: day.inMonth && isToday(day.date),
             }"
           >
-            <div v-if="day.inMonth" class="calendar-cell-content">
+            <div v-if="day.inMonth" class="calendar-cell-content" @click="openChartsModal(day.date)">
               <strong>{{ day.dayNumber }}</strong>
               <small v-if="day.trades">{{ day.trades }} trade{{ day.trades > 1 ? 's' : '' }} realizados</small>
               <small
@@ -3045,6 +3348,19 @@ watch(activeSection, (section) => {
                     </strong>
                   </li>
                 </ul>
+                <div v-if="chartsForDate(day.date).length">
+                  <p style="margin-top:0.6em;">Gráficos guardados</p>
+                  <div class="calendar-charts">
+                    <div v-for="chart in chartsForDate(day.date)" :key="chart.id" class="calendar-chart-item">
+                      <a :href="chart.url" :download="chart.name" target="_blank" rel="noopener noreferrer">
+                        <img :src="chart.url" alt="chart thumbnail" style="width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,0.06)" />
+                      </a>
+                      <div style="font-size:0.8em;margin-top:4px;text-align:center;">
+                        <a :href="chart.url" :download="chart.name">Descargar</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
@@ -3374,6 +3690,42 @@ watch(activeSection, (section) => {
           @close="closeBigFiveTest"
           @save="saveBigFiveResults"
         />
+      </div>
+    </div>
+  </Transition>
+
+  <Transition name="fade">
+    <div v-if="showChartsModal" class="modal-overlay" @click.self="closeChartsModal">
+      <div class="modal-content charts-modal">
+        <button class="intro-close" @click="closeChartsModal" aria-label="Cerrar">×</button>
+        <h3 style="margin-top:0;">Gráficos del día</h3>
+        <div v-if="!modalCharts.length">No hay gráficos para esta fecha.</div>
+        <div v-else class="charts-grid" style="display:flex;flex-wrap:wrap;gap:12px;">
+          <div v-for="c in modalCharts" :key="c.id" style="width:220px;">
+            <button @click="openPreview(c)" style="border:0;background:transparent;padding:0;cursor:pointer;">
+              <img :src="c.url" :alt="c.name || 'chart'" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+            </button>
+            <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-size:0.85em">{{ c.name || c.originalName || 'chart.png' }}</div>
+              <a :href="c.url" :download="c.name || c.originalName" style="font-size:0.85em">Descargar</a>
+            </div>
+          </div>
+        </div>
+
+        <Transition name="fade">
+          <div v-if="previewChart" class="modal-overlay" @click.self="closePreview">
+            <div class="modal-content" style="max-width:900px; width:90%; padding:12px;">
+              <button class="intro-close" @click="closePreview" aria-label="Cerrar">×</button>
+              <div style="text-align:center;">
+                <img :src="previewChart.url || previewChart.dataUrl || previewChart.thumb" :alt="previewChart.name || 'preview'" style="max-width:100%; height:auto; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.6)" />
+                <div style="margin-top:8px; display:flex; justify-content:center; gap:12px;">
+                  <a :href="previewChart.url || previewChart.dataUrl" :download="previewChart.name || previewChart.originalName" class="btn">Descargar</a>
+                  <button class="btn" @click="closePreview">Cerrar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
     </div>
   </Transition>

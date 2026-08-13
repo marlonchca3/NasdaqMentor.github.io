@@ -6,6 +6,7 @@ const firebaseConfig = {
   apiKey: 'AIzaSyCi-lu8w0QNR7aLke6_1x320siUPn6nczo',
   authDomain: 'nasdaq-fdfec.firebaseapp.com',
   projectId: 'nasdaq-fdfec',
+  // Correct storage bucket for this Firebase project
   storageBucket: 'nasdaq-fdfec.firebasestorage.app',
   messagingSenderId: '712261404322',
   appId: '1:712261404322:web:c110599cc1b229280f39fb',

@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   trades: {
@@ -311,6 +311,59 @@ const xLabels = computed(() => {
   }
   return labels
 })
+
+const chartWrap = ref(null)
+
+async function exportChartImage() {
+  try {
+    const wrap = chartWrap.value
+    if (!wrap) return null
+    const svg = wrap.querySelector('svg')
+    if (!svg) return null
+
+    const serializer = new XMLSerializer()
+    let svgString = serializer.serializeToString(svg)
+    if (!svgString.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+      svgString = svgString.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"')
+    }
+    if (!svgString.match(/^<svg[^>]+xmlns:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+      svgString = svgString.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"')
+    }
+
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+
+    const img = new Image()
+    // Ensure CORS-safe by using object URL
+    img.src = url
+
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = (e) => reject(e)
+    })
+
+    const width = svg.clientWidth || W
+    const height = svg.clientHeight || H
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    // Fill background to match chart background
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg') || '#061020'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    const png = canvas.toDataURL('image/png', 0.92)
+    URL.revokeObjectURL(url)
+    return png
+  } catch (err) {
+    console.error('Error exporting chart image:', err)
+    return null
+  }
+}
+
+// Expose function to parent
+defineExpose({ exportChartImage })
 </script>
 
 <style scoped>
