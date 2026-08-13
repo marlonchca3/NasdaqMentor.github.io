@@ -20,7 +20,7 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
-import { getStorage, ref as sRef, uploadString, getDownloadURL } from 'firebase/storage'
+import { getStorage, ref as sRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage'
 import { auth, db, loginWithGoogle, logout } from './firebase'
 
 const maxTasks = 10
@@ -650,6 +650,7 @@ const evalCalculatorTrades = ref(1)
 const tradesList = ref([])
 const pnlChartRef = ref(null)
 const chartFileInput = ref(null)
+const uploadTargetDate = ref(null)
 const chartsList = ref([])
 const guestCharts = ref([])
 const showChartsModal = ref(false)
@@ -1431,6 +1432,11 @@ function triggerChartFilePicker() {
   chartFileInput.value.click()
 }
 
+function startUploadForDate(date) {
+  uploadTargetDate.value = normalizeDate(date)
+  triggerChartFilePicker()
+}
+
 async function onChartFileSelected(e) {
   const file = e.target.files && e.target.files[0]
   if (!file) return
@@ -1454,7 +1460,8 @@ async function onChartFileSelected(e) {
       const raw = localStorage.getItem(key)
       const arr = raw ? JSON.parse(raw) : []
       const thumb = await createThumbnailFromDataUrl(dataUrl, 300)
-      arr.unshift({ id: `upload-${Date.now()}`, createdAt: new Date().toISOString(), name: file.name, thumb })
+      const createdAtDate = uploadTargetDate.value ? new Date(uploadTargetDate.value.getFullYear(), uploadTargetDate.value.getMonth(), uploadTargetDate.value.getDate(), 12, 0, 0) : new Date()
+      arr.unshift({ id: `upload-${Date.now()}`, createdAt: createdAtDate.toISOString(), name: file.name, dataUrl, thumb })
       localStorage.setItem(key, JSON.stringify(arr.slice(0, 50)))
     } catch (err) {
       console.warn('No se pudo guardar el archivo en localStorage', err)
@@ -1468,13 +1475,16 @@ async function onChartFileSelected(e) {
         const storageRef = sRef(storage, path)
         await uploadString(storageRef, dataUrl, 'data_url')
         const downloadUrl = await getDownloadURL(storageRef)
+        const createdAtValue = uploadTargetDate.value ? new Date(uploadTargetDate.value.getFullYear(), uploadTargetDate.value.getMonth(), uploadTargetDate.value.getDate(), 12, 0, 0) : serverTimestamp()
         await addDoc(collection(db, 'users', user.value.uid, 'charts'), {
           url: downloadUrl,
           filename: path,
           originalName: file.name,
-          createdAt: serverTimestamp(),
+          createdAt: createdAtValue,
         })
         .then((ref) => console.debug('onChartFileSelected: chart doc added', ref.id, downloadUrl))
+        // clear upload target after successful upload
+        uploadTargetDate.value = null
       } catch (err) {
         console.error('Error subiendo archivo a Storage/Firestore:', err)
       }
@@ -1483,6 +1493,8 @@ async function onChartFileSelected(e) {
     console.error('Error leyendo/subiendo archivo:', err)
   } finally {
     savingChart.value = false
+    // reset target date if user cancelled or ended
+    uploadTargetDate.value = null
   }
 }
 
@@ -1859,6 +1871,60 @@ async function removeTrade(tradeId) {
   }
   tradesList.value = tradesList.value.filter((t) => t.id !== tradeId)
   persistEvalTrades()
+}
+
+async function removeChart(chartId) {
+  const confirmed = typeof window !== 'undefined' ? window.confirm('Eliminar este gráfico?') : true
+  if (!confirmed) return
+
+  // find entry (may be in chartsList or guestCharts)
+  const entry = chartsList.value.find((c) => c.id === chartId) || guestCharts.value.find((c) => c.id === chartId) || null
+
+  // Optimistic UI update: remove from lists immediately so user sees real-time change
+  chartsList.value = chartsList.value.filter((c) => c.id !== chartId)
+  guestCharts.value = guestCharts.value.filter((c) => c.id !== chartId)
+  modalCharts.value = modalCharts.value.filter((c) => c.id !== chartId)
+
+  // persist guest localStorage removals
+  try {
+    const key1 = 'nasdaq-mentor-uploaded-charts'
+    const raw1 = localStorage.getItem(key1)
+    if (raw1) {
+      const arr1 = JSON.parse(raw1).filter((c) => c.id !== chartId)
+      localStorage.setItem(key1, JSON.stringify(arr1))
+    }
+  } catch (e) {
+    // ignore
+  }
+  try {
+    const key2 = 'nasdaq-mentor-saved-charts'
+    const raw2 = localStorage.getItem(key2)
+    if (raw2) {
+      const arr2 = JSON.parse(raw2).filter((c) => c.id !== chartId)
+      localStorage.setItem(key2, JSON.stringify(arr2))
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // If user is signed in, attempt to delete storage object and Firestore doc (best-effort)
+  if (user.value) {
+    try {
+      if (entry && entry.filename) {
+        try {
+          const storage = getStorage()
+          const storageRef = sRef(storage, entry.filename)
+          await deleteObject(storageRef)
+        } catch (err) {
+          console.debug('removeChart: could not delete storage object', err)
+        }
+      }
+
+      await deleteDoc(doc(db, 'users', user.value.uid, 'charts', chartId))
+    } catch (err) {
+      console.error('Error removing chart:', err)
+    }
+  }
 }
 
 function loadTasks() {
@@ -3226,7 +3292,6 @@ watch(activeSection, (section) => {
 
         <div class="eval-journal-actions">
           <button class="primary-button" :disabled="isOperationLocked || savingTrade" @click="addTrade">Guardar trade</button>
-          <button class="ghost-button" :disabled="savingChart" @click="triggerChartFilePicker">Subir gráfico</button>
           <input ref="chartFileInput" type="file" accept="image/*" style="display:none" @change="onChartFileSelected" />
           <button class="ghost-button" @click="clearAllTrades">Limpiar</button>
         </div>
@@ -3337,7 +3402,8 @@ watch(activeSection, (section) => {
               >
                 {{ day.usd > 0 ? '+' : '' }}${{ day.usd.toFixed(2) }}
               </small>
-
+              
+              <button v-if="day.trades" class="calendar-upload-btn" @click.stop="startUploadForDate(day.date)" title="Subir foto">📤</button>
               <div v-if="day.trades" class="calendar-tooltip">
                 <p>Trades del dia</p>
                 <ul>
@@ -3700,11 +3766,14 @@ watch(activeSection, (section) => {
         <button class="intro-close" @click="closeChartsModal" aria-label="Cerrar">×</button>
         <h3 style="margin-top:0;">Gráficos del día</h3>
         <div v-if="!modalCharts.length">No hay gráficos para esta fecha.</div>
-        <div v-else class="charts-grid" style="display:flex;flex-wrap:wrap;gap:12px;">
+          <div v-else class="charts-grid" style="display:flex;flex-wrap:wrap;gap:12px;">
           <div v-for="c in modalCharts" :key="c.id" style="width:220px;">
-            <button @click="openPreview(c)" style="border:0;background:transparent;padding:0;cursor:pointer;">
-              <img :src="c.url" :alt="c.name || 'chart'" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
-            </button>
+            <div class="chart-thumb-wrap" style="position:relative;">
+              <button @click="openPreview(c)" style="border:0;background:transparent;padding:0;cursor:pointer;display:block;">
+                <img :src="c.url" :alt="c.name || 'chart'" style="width:100%;height:140px;object-fit:cover;border-radius:6px;border:1px solid rgba(0,0,0,0.08)" />
+              </button>
+              <button class="chart-delete-btn" @click="removeChart(c.id)" aria-label="Eliminar gráfico">×</button>
+            </div>
             <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
               <div style="font-size:0.85em">{{ c.name || c.originalName || 'chart.png' }}</div>
               <a :href="c.url" :download="c.name || c.originalName" style="font-size:0.85em">Descargar</a>
