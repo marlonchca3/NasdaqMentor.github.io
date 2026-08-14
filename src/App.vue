@@ -681,6 +681,8 @@ const tradeError = ref('')
 const tradeDate = ref(formatDateForInput(new Date()))
 const tradeSession = ref('Sesion')
 const tradeNote = ref('')
+const editingTradeId = ref(null)
+const editingTradeDraft = ref(null)
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
 let unsubscribeEvalTrades = null
@@ -1863,6 +1865,71 @@ async function addTrade() {
     }
     savingTrade.value = false
   }
+}
+
+function startEditTrade(trade) {
+  editingTradeId.value = trade.id
+  editingTradeDraft.value = {
+    usd: Number.isFinite(trade.rBase) && trade.rBase > 0
+      ? (trade.r * trade.rBase)
+      : (trade.r * (trade.rBase ?? evalOneR.value)),
+    session: trade.session || 'Sesion',
+    note: trade.note || '',
+    tradeDate: formatDateForInput(normalizeDate(trade.tradeDate || trade.createdAt) || new Date()),
+  }
+}
+
+function cancelEditTrade() {
+  editingTradeId.value = null
+  editingTradeDraft.value = null
+  tradeError.value = ''
+}
+
+async function saveEditedTrade(tradeId) {
+  const currentTrade = tradesList.value.find((trade) => trade.id === tradeId)
+  if (!currentTrade || !editingTradeDraft.value) {
+    cancelEditTrade()
+    return
+  }
+
+  const usdValue = Number.parseFloat(editingTradeDraft.value.usd)
+  if (!Number.isFinite(usdValue) || usdValue === 0) {
+    tradeError.value = 'Debes ingresar un valor USD válido para guardar el trade.'
+    return
+  }
+
+  const baseR = Number.isFinite(currentTrade.rBase) && currentTrade.rBase > 0
+    ? currentTrade.rBase
+    : evalOneR.value
+
+  const parsedTradeDate = normalizeDate(editingTradeDraft.value.tradeDate || new Date()) || new Date()
+  const nextPayload = {
+    r: usdValue / baseR,
+    session: String(editingTradeDraft.value.session || 'Sesion').slice(0, 40),
+    note: String(editingTradeDraft.value.note || '').slice(0, 140),
+    tradeDate: parsedTradeDate,
+    rBase: baseR,
+  }
+
+  if (user.value) {
+    try {
+      await updateDoc(doc(db, 'users', user.value.uid, 'trades', tradeId), nextPayload)
+    } catch (err) {
+      console.error('Error al editar trade en Firestore:', err)
+      tradeError.value = 'No se pudo actualizar el trade. Revisa tu conexión o permisos.'
+      return
+    }
+  } else {
+    tradesList.value = tradesList.value.map((trade) => trade.id === tradeId ? {
+      ...trade,
+      ...nextPayload,
+    } : trade)
+    persistEvalTrades()
+  }
+
+  editingTradeId.value = null
+  editingTradeDraft.value = null
+  tradeError.value = ''
 }
 
 async function removeTrade(tradeId) {
@@ -3334,24 +3401,56 @@ watch(activeSection, (section) => {
                 <td colspan="6" class="empty-row">Aun no hay trades registrados</td>
               </tr>
               <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
-                <td :class="(trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) > 0 ? 'pos' : ((trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) < 0 ? 'neg' : '')">
-                  <template v-if="typeof trade.rBase === 'number'">
-                    {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
-                  </template>
-                  <template v-else>
-                    <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
-                  </template>
-                </td>
-                <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
-                <td>{{ trade.session || 'Sesion' }}</td>
-                <td>{{ trade.note || '-' }}</td>
-                <td>
-                  {{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}
-                  <span v-if="normalizeDate(trade.createdAt)" style="display:block;font-size:0.8em;opacity:0.6;">{{ formatTimeFromDate(normalizeDate(trade.createdAt)) }}</span>
-                </td>
-                <td>
-                  <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
-                </td>
+                <template v-if="editingTradeId === trade.id && editingTradeDraft">
+                  <td>
+                    <input v-model.number="editingTradeDraft.usd" class="eval-inline-input" type="number" step="0.01" inputmode="decimal" />
+                  </td>
+                  <td class="read-only-r">{{ (Number.parseFloat(editingTradeDraft.usd || 0) / (Number.isFinite(trade.rBase) && trade.rBase > 0 ? trade.rBase : evalOneR.value)).toFixed(2) }}R</td>
+                  <td>
+                    <select v-model="editingTradeDraft.session" class="eval-inline-input">
+                      <option>Sesion</option>
+                      <option>Londres</option>
+                      <option>New York AM</option>
+                      <option>New York PM</option>
+                      <option>Asia</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input v-model="editingTradeDraft.note" class="eval-inline-input" type="text" maxlength="140" placeholder="Nota" />
+                  </td>
+                  <td>
+                    <input v-model="editingTradeDraft.tradeDate" class="eval-inline-input" type="date" />
+                  </td>
+                  <td>
+                    <div class="eval-inline-actions">
+                      <button class="eval-save-btn" @click="saveEditedTrade(trade.id)">Guardar</button>
+                      <button class="eval-cancel-btn" @click="cancelEditTrade">Cancelar</button>
+                    </div>
+                  </td>
+                </template>
+                <template v-else>
+                  <td :class="(trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) > 0 ? 'pos' : ((trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)) < 0 ? 'neg' : '')">
+                    <template v-if="typeof trade.rBase === 'number'">
+                      {{ trade.r > 0 ? '+' : '' }}${{ (trade.r * trade.rBase).toFixed(2) }}
+                    </template>
+                    <template v-else>
+                      <span style="color: #f87171; font-size: 0.95em;">Sin R guardado</span>
+                    </template>
+                  </td>
+                  <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
+                  <td>{{ trade.session || 'Sesion' }}</td>
+                  <td>{{ trade.note || '-' }}</td>
+                  <td>
+                    {{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}
+                    <span v-if="normalizeDate(trade.createdAt)" style="display:block;font-size:0.8em;opacity:0.6;">{{ formatTimeFromDate(normalizeDate(trade.createdAt)) }}</span>
+                  </td>
+                  <td>
+                    <div class="eval-inline-actions">
+                      <button class="eval-edit-btn" @click="startEditTrade(trade)">Editar</button>
+                      <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
+                    </div>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>

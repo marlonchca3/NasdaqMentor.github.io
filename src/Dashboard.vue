@@ -184,6 +184,68 @@ const pieSlices = computed(() => {
   return slices
 })
 
+const cumulativeYAxis = computed(() => {
+  const values = cumulativePnl.value.map((point) => point.value)
+  if (!values.length) return []
+
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const spread = max - min || 1
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    const value = max - spread * ratio
+    return {
+      value,
+      y: 170 - ratio * 150,
+    }
+  })
+})
+
+const cumulativeXLabels = computed(() => {
+  if (!cumulativePnl.value.length) return []
+
+  const step = Math.max(1, Math.ceil(cumulativePnl.value.length / 4))
+  return cumulativePnl.value
+    .map((point, index) => ({ point, index }))
+    .filter(({ index }) => index === 0 || index === cumulativePnl.value.length - 1 || index % step === 0)
+    .map(({ point, index }) => ({
+      label: formatDateLabel(point.date),
+      x: 30 + (index / Math.max(1, cumulativePnl.value.length - 1)) * 360,
+    }))
+})
+
+const dailyYAxis = computed(() => {
+  const values = dailyPnl.value.map((point) => point.value)
+  if (!values.length) return []
+
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const spread = max - min || 1
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    const value = max - spread * ratio
+    return {
+      value,
+      y: 170 - ratio * 150,
+    }
+  })
+})
+
+const dailyXLabels = computed(() => {
+  if (!dailyPnl.value.length) return []
+
+  const step = Math.max(1, Math.ceil(dailyPnl.value.length / 4))
+  return dailyPnl.value
+    .map((point, index) => ({ point, index }))
+    .filter(({ index }) => index === 0 || index === dailyPnl.value.length - 1 || index % step === 0)
+    .map(({ point, index }) => ({
+      label: formatDateLabel(point.date),
+      x: 30 + (index / Math.max(1, dailyPnl.value.length - 1)) * 360,
+    }))
+})
+
 // Formatear valores USD
 function formatUsd(value) {
   return new Intl.NumberFormat('es-AR', {
@@ -192,6 +254,19 @@ function formatUsd(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+function formatAxisUsd(value) {
+  const absolute = Math.abs(value)
+  if (absolute >= 1000) return `$${(value / 1000).toFixed(1)}k`
+  return `$${value.toFixed(0)}`
+}
+
+function formatDateLabel(value) {
+  return new Intl.DateTimeFormat('es-ES', {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value))
 }
 </script>
 
@@ -258,17 +333,40 @@ function formatUsd(value) {
       <div class="chart-card">
         <h3>P&L Acumulado</h3>
         <svg class="line-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
-          <!-- Grid lines -->
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
-          
-          <!-- Data line -->
+
+          <g v-if="cumulativeYAxis.length">
+            <line
+              v-for="(tick, i) in cumulativeYAxis"
+              :key="i"
+              :x1="30"
+              :x2="390"
+              :y1="tick.y"
+              :y2="tick.y"
+              stroke="#334155"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+            />
+            <text
+              v-for="(tick, i) in cumulativeYAxis"
+              :key="`y-${i}`"
+              x="6"
+              :y="tick.y + 4"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="start"
+            >
+              {{ formatAxisUsd(tick.value) }}
+            </text>
+          </g>
+
           <polyline
             v-if="cumulativePnl.length"
             :points="cumulativePnl.map((d, i) => {
               const x = 30 + (i / Math.max(1, cumulativePnl.length - 1)) * 360
-              const min = Math.min(...cumulativePnl.map(c => c.value))
-              const max = Math.max(...cumulativePnl.map(c => c.value))
+              const min = Math.min(0, ...cumulativePnl.map(c => c.value))
+              const max = Math.max(0, ...cumulativePnl.map(c => c.value))
               const range = max - min || 1
               const y = 170 - ((d.value - min) / range) * 150
               return [x, y].join(',')
@@ -277,20 +375,35 @@ function formatUsd(value) {
             stroke="#4ade80"
             stroke-width="2"
           />
-          
-          <!-- Area under curve -->
+
           <polygon
             v-if="cumulativePnl.length"
             :points="`30,170 ${cumulativePnl.map((d, i) => {
               const x = 30 + (i / Math.max(1, cumulativePnl.length - 1)) * 360
-              const min = Math.min(...cumulativePnl.map(c => c.value))
-              const max = Math.max(...cumulativePnl.map(c => c.value))
+              const min = Math.min(0, ...cumulativePnl.map(c => c.value))
+              const max = Math.max(0, ...cumulativePnl.map(c => c.value))
               const range = max - min || 1
               const y = 170 - ((d.value - min) / range) * 150
               return [x, y].join(',')
             }).join(' ')} 390,170`"
             fill="rgba(74, 222, 128, 0.1)"
           />
+
+          <g v-if="cumulativeXLabels.length">
+            <text
+              v-for="(label, i) in cumulativeXLabels"
+              :key="`x-${i}`"
+              :x="label.x"
+              y="190"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="middle"
+            >
+              {{ label.label }}
+            </text>
+          </g>
+
+          <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
         </svg>
       </div>
 
@@ -298,29 +411,69 @@ function formatUsd(value) {
       <div class="chart-card">
         <h3>P&L Diario</h3>
         <svg class="bar-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
-          <!-- Grid lines -->
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
-          
-          <!-- Bars -->
+
+          <g v-if="dailyYAxis.length">
+            <line
+              v-for="(tick, i) in dailyYAxis"
+              :key="i"
+              :x1="30"
+              :x2="390"
+              :y1="tick.y"
+              :y2="tick.y"
+              stroke="#334155"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+            />
+            <text
+              v-for="(tick, i) in dailyYAxis"
+              :key="`daily-y-${i}`"
+              x="6"
+              :y="tick.y + 4"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="start"
+            >
+              {{ formatAxisUsd(tick.value) }}
+            </text>
+          </g>
+
           <g v-if="dailyPnl.length">
             <rect
               v-for="(day, i) in dailyPnl"
               :key="day.date"
               :x="30 + (i / Math.max(1, dailyPnl.length - 1)) * 360 - 8"
-              :y="day.value >= 0 ? 170 - (day.value / Math.max(...dailyPnl.map(d => d.value)) || 1) * 150 : 170"
+              :y="day.value >= 0 ? 170 - (day.value / Math.max(...dailyPnl.map(d => Math.abs(d.value))) || 1) * 150 : 170"
               :width="16"
               :height="Math.abs((day.value / Math.max(...dailyPnl.map(d => Math.abs(d.value))) || 1) * 150)"
               :fill="day.value >= 0 ? '#4ade80' : '#f87171'"
               :opacity="0.7"
             />
           </g>
+
+          <g v-if="dailyXLabels.length">
+            <text
+              v-for="(label, i) in dailyXLabels"
+              :key="`daily-x-${i}`"
+              :x="label.x"
+              y="190"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="middle"
+            >
+              {{ label.label }}
+            </text>
+          </g>
+
+          <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
         </svg>
       </div>
 
       <!-- Distribución de Resultados -->
       <div class="chart-card">
         <h3>Distribución de Resultados (R)</h3>
+        <div class="chart-summary">Total de trades: {{ totalTrades }}</div>
         <svg class="pie-chart" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
           <g v-if="pieSlices.length > 0">
             <path
