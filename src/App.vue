@@ -657,6 +657,8 @@ const guestCharts = ref([])
 const showChartsModal = ref(false)
 const modalCharts = ref([])
 const previewChart = ref(null)
+const showNotesModal = ref(false)
+const dayNotes = ref([])
 
 function parseCalcNumber(value) {
   const parsed = Number(value)
@@ -837,7 +839,7 @@ const calendarDayMap = computed(() => {
     if (!key) return
 
     if (!map.has(key)) {
-      map.set(key, { r: 0, trades: 0, usd: 0, tradeDetails: [] })
+      map.set(key, { r: 0, trades: 0, usd: 0, tradeDetails: [], notes: [] })
     }
 
     const slot = map.get(key)
@@ -851,6 +853,10 @@ const calendarDayMap = computed(() => {
       usd: tradeUsd,
       note: trade.note || '',
     })
+    // Agregar notas al array si existen
+    if (trade.note && trade.note.trim()) {
+      slot.notes.push(trade.note)
+    }
   })
   return map
 })
@@ -880,6 +886,7 @@ const calendarCells = computed(() => {
       trades: stats?.trades ?? 0,
       usd: stats?.usd ?? 0,
       tradeDetails: stats?.tradeDetails ?? [],
+      notes: stats?.notes ?? [],
     })
   }
 
@@ -1628,6 +1635,16 @@ function openChartsModal(date) {
 function closeChartsModal() {
   showChartsModal.value = false
   modalCharts.value = []
+}
+
+function openNotesModal(notes) {
+  dayNotes.value = notes
+  showNotesModal.value = true
+}
+
+function closeNotesModal() {
+  showNotesModal.value = false
+  dayNotes.value = []
 }
 
 function openPreview(chart) {
@@ -3522,7 +3539,10 @@ watch(activeSection, (section) => {
                 {{ day.usd > 0 ? '+' : '' }}${{ day.usd.toFixed(2) }}
               </small>
               
-              <button v-if="day.trades" class="calendar-upload-btn" @click.stop="startUploadForDate(day.date)" title="Subir foto">📤</button>
+              <div class="calendar-actions">
+                <button v-if="day.trades" class="calendar-upload-btn" @click.stop="startUploadForDate(day.date)" title="Subir foto">📤</button>
+                <button v-if="day.notes.length > 0" class="calendar-note-icon" @click.stop="openNotesModal(day.notes)" title="Ver notas">📝</button>
+              </div>
               <div v-if="day.trades" class="calendar-tooltip">
                 <p>Trades del dia</p>
                 <ul>
@@ -3531,6 +3551,9 @@ watch(activeSection, (section) => {
                     <strong :class="trade.usd > 0 ? 'pos' : 'neg'">
                       {{ trade.usd > 0 ? '+' : '' }}${{ trade.usd.toFixed(2) }}
                     </strong>
+                    <div v-if="trade.note" class="trade-note-item">
+                      <small style="color: #a1a1a1;">📝 {{ trade.note }}</small>
+                    </div>
                   </li>
                 </ul>
                 <div v-if="chartsForDate(day.date).length">
@@ -3914,6 +3937,25 @@ watch(activeSection, (section) => {
             </div>
           </div>
         </Transition>
+      </div>
+    </div>
+  </Transition>
+
+  <!-- ── Notes Modal ── -->
+  <Transition name="fade">
+    <div v-if="showNotesModal" class="modal-overlay" @click.self="closeNotesModal">
+      <div class="modal-content notes-modal">
+        <button class="intro-close" @click="closeNotesModal" aria-label="Cerrar">×</button>
+        <h3 style="margin-top:0;">📝 Notas del día</h3>
+        <div v-if="!dayNotes.length" style="text-align:center; color:#999; padding:20px;">
+          No hay notas para este día.
+        </div>
+        <div v-else class="notes-list">
+          <div v-for="(note, idx) in dayNotes" :key="idx" class="note-item">
+            <div class="note-number">{{ idx + 1 }}</div>
+            <div class="note-content">{{ note }}</div>
+          </div>
+        </div>
       </div>
     </div>
   </Transition>
