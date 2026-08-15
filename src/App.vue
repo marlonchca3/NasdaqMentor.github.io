@@ -1128,7 +1128,50 @@ const evalWinRate = computed(() => {
 })
 
 // ── Checklist emocional & Disciplina ──────────────────────────────
-const emotionalState = ref(null)   // 'calmado' | 'ansioso' | null
+const emotionalChecklistOptions = [
+  {
+    key: 'fisico',
+    options: [
+      { score: 0, label: 'Fisico - mal' },
+      { score: 1, label: 'Salud OK, energia, dormir' },
+      { score: 2, label: 'Rebosante' },
+    ],
+  },
+  {
+    key: 'perdidasDia',
+    options: [
+      { score: 0, label: 'Perdidas dia' },
+      { score: 1, label: 'Dia anterior mixto o sin operar' },
+      { score: 2, label: 'Ganancias dia' },
+    ],
+  },
+  {
+    key: 'preparacion',
+    options: [
+      { score: 0, label: 'No preparado' },
+      { score: 1, label: 'Medianamente preparado' },
+      { score: 2, label: 'Muy preparado' },
+    ],
+  },
+  {
+    key: 'animo',
+    options: [
+      { score: 0, label: 'Desanimado' },
+      { score: 1, label: 'Animo regular' },
+      { score: 2, label: 'Muy animado' },
+    ],
+  },
+  {
+    key: 'ocupacion',
+    options: [
+      { score: 0, label: 'Muy ocupado' },
+      { score: 1, label: 'Con lo normal en el plato' },
+      { score: 2, label: 'Libre' },
+    ],
+  },
+]
+const emotionalChecklist = ref({})
+const emotionalLowScoreLockActive = ref(false)
 const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
 const showBigFiveTest = ref(false)
 const weeklyDisciplineBarRef = ref(null)
@@ -1156,15 +1199,72 @@ const operationLockCountdown = computed(() => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 })
 
-function selectEmotionalState(state) {
-  emotionalState.value = emotionalState.value === state ? null : state
+const emotionalChecklistComplete = computed(() =>
+  emotionalChecklistOptions.every((row) => Number.isFinite(emotionalChecklist.value[row.key])),
+)
 
-  if (emotionalState.value === 'calmado') {
-    speak('Estado emocional calmado. Estás listo para operar.')
-  } else if (emotionalState.value === 'ansioso') {
-    speak('Estas ansioso, no operes todavía. Respira y espera por 20 minutos.')
-    applyOperationLock(20)
+const emotionalChecklistScore = computed(() =>
+  emotionalChecklistOptions.reduce((total, row) => {
+    const value = emotionalChecklist.value[row.key]
+    return total + (Number.isFinite(value) ? value : 0)
+  }, 0),
+)
+
+const emotionalChecklistStatus = computed(() => {
+  if (!emotionalChecklistComplete.value) {
+    return {
+      label: 'Completa el checklist',
+      className: 'emotional-score--pending',
+      speakText: '',
+    }
   }
+
+  const score = emotionalChecklistScore.value
+  if (score < 5) {
+    return {
+      label: 'No operar',
+      className: 'emotional-score--danger',
+      speakText: 'Checklist emocional menor a cinco. No operes por treinta minutos.',
+    }
+  }
+
+  if (score === 7 || score === 8) {
+    return {
+      label: 'Bien',
+      className: 'emotional-score--good',
+      speakText: 'Checklist emocional en zona verde. Estas listo para operar.',
+    }
+  }
+
+  return {
+    label: 'Atencion',
+    className: 'emotional-score--attention',
+    speakText: 'Checklist emocional en zona de atencion. Opera con cuidado.',
+  }
+})
+
+function selectEmotionalChecklistValue(key, score) {
+  emotionalChecklist.value = {
+    ...emotionalChecklist.value,
+    [key]: score,
+  }
+
+  if (!emotionalChecklistComplete.value) {
+    emotionalLowScoreLockActive.value = false
+    return
+  }
+
+  if (emotionalChecklistScore.value < 5) {
+    if (!emotionalLowScoreLockActive.value) {
+      speak(emotionalChecklistStatus.value.speakText)
+      applyOperationLock(30)
+      emotionalLowScoreLockActive.value = true
+    }
+    return
+  }
+
+  emotionalLowScoreLockActive.value = false
+  speak(emotionalChecklistStatus.value.speakText)
 }
 
 function selectTradeCompliance(value) {
@@ -1278,13 +1378,19 @@ const complianceCopy = computed(() => {
 })
 
 const emotionalCopy = computed(() => {
-  if (emotionalState.value === 'calmado') {
-    return 'Estado emocional confirmado. Estás listo para operar.'
+  if (!emotionalChecklistComplete.value) {
+    return 'Completa las 5 filas antes de operar. El puntaje define si puedes registrar trades.'
   }
-  if (emotionalState.value === 'ansioso') {
-    return 'No operes todavía. Respira y espera por 20 minutos.'
+
+  if (emotionalChecklistScore.value < 5) {
+    return 'Puntaje menor a 5: no operes. La operativa queda bloqueada por 30 minutos.'
   }
-  return 'Este filtro emocional es obligatorio para abrir la operativa del día.'
+
+  if (emotionalChecklistScore.value === 7 || emotionalChecklistScore.value === 8) {
+    return 'Puntaje 7-8: zona bien. Mantén la disciplina.'
+  }
+
+  return 'Puntaje 5-6 o 9-10: zona de atención. Opera con tamaño y foco controlados.'
 })
 
 const lockoutCopy = computed(() => {
@@ -1751,8 +1857,8 @@ async function addTrade() {
     return
   }
 
-  if (!emotionalState.value) {
-    tradeError.value = 'Debes confirmar tu estado emocional antes de registrar un trade.'
+  if (!emotionalChecklistComplete.value) {
+    tradeError.value = 'Debes completar el checklist emocional antes de registrar un trade.'
     return
   }
   if (!tradeCompliance.value) {
@@ -1782,7 +1888,9 @@ async function addTrade() {
     tradeDate: parsedTradeDate,
     rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
     compliance: tradeCompliance.value,
-    emotional: emotionalState.value,
+    emotional: emotionalChecklistStatus.value.label,
+    emotionalScore: emotionalChecklistScore.value,
+    emotionalChecklist: { ...emotionalChecklist.value },
   }
 
   // Capturar imagen del chart (si disponible) añadiendo temporalmente el trade al listado
@@ -3234,20 +3342,43 @@ watch(activeSection, (section) => {
           <div class="filter-section-head">
             <div>
               <p class="filter-eyebrow">Checklist Emocional</p>
-              <h2 class="filter-title">Confirma tu estado antes de operar</h2>
+              <h2 class="filter-title">Puntaje antes de operar</h2>
               <p class="filter-copy">{{ emotionalCopy }}</p>
             </div>
-            <div class="emotional-btns">
+            <div class="emotional-score" :class="emotionalChecklistStatus.className">
+              <span>{{ emotionalChecklistStatus.label }}</span>
+              <strong>{{ emotionalChecklistScore }}</strong>
+            </div>
+          </div>
+          <div class="emotional-checklist-table" role="group" aria-label="Checklist emocional">
+            <div
+              v-for="row in emotionalChecklistOptions"
+              :key="row.key"
+              class="emotional-checklist-row"
+            >
               <button
-                class="emotional-btn"
-                :class="{ 'emotional-btn--calm': emotionalState === 'calmado' }"
-                @click="selectEmotionalState('calmado')"
-              >Estás calmado</button>
-              <button
-                class="emotional-btn"
-                :class="{ 'emotional-btn--anxious': emotionalState === 'ansioso' }"
-                @click="selectEmotionalState('ansioso')"
-              >Estás ansioso</button>
+                v-for="option in row.options"
+                :key="`${row.key}-${option.score}`"
+                class="emotional-checklist-cell"
+                :class="[
+                  `emotional-checklist-cell--score-${option.score}`,
+                  { active: emotionalChecklist[row.key] === option.score },
+                ]"
+                type="button"
+                @click="selectEmotionalChecklistValue(row.key, option.score)"
+              >
+                <span>{{ option.label }}</span>
+                <strong>{{ option.score }}</strong>
+              </button>
+              <div class="emotional-checklist-value">
+                {{ Number.isFinite(emotionalChecklist[row.key]) ? emotionalChecklist[row.key] : '-' }}
+              </div>
+            </div>
+            <div class="emotional-checklist-footer">
+              <span class="emotional-checklist-band emotional-checklist-band--danger">1-2-3-4 No operar</span>
+              <span class="emotional-checklist-band emotional-checklist-band--attention">5-6 Y 9-10 Atencion</span>
+              <span class="emotional-checklist-band emotional-checklist-band--good">7-8 Bien</span>
+              <strong class="emotional-checklist-total">{{ emotionalChecklistScore }}</strong>
             </div>
           </div>
         </div>
@@ -3302,7 +3433,7 @@ watch(activeSection, (section) => {
             <div ref="weeklyDisciplineBarRef" class="discipline-fill"></div>
           </div>
           <p v-if="lockoutCopy" class="filter-warning">{{ lockoutCopy }}</p>
-          <p v-if="!emotionalState" class="filter-warning">Marca primero si estás calmado o ansioso antes de registrar un trade.</p>
+          <p v-if="!emotionalChecklistComplete" class="filter-warning">Completa primero las 5 filas del checklist emocional antes de registrar un trade.</p>
         </div>
 
         <div class="eval-meta-top">
@@ -3347,62 +3478,6 @@ watch(activeSection, (section) => {
             <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185' }"></div>
           </div>
         </div>
-        <div class="eval-calculator-card">
-          <div class="filter-section-head">
-            <div>
-              <p class="filter-eyebrow">Calculadora de objetivo</p>
-              <h2 class="filter-title">¿Cuánto necesitas operar para pasar la cuenta?</h2>
-              <p class="filter-copy">Ingresa tu saldo, el objetivo, el riesgo por trade y la cantidad de trades para calcular cuánto necesitas para pasar la cuenta.</p>
-            </div>
-          </div>
-
-          <div class="calc-grid">
-            <label class="calc-field">
-              <span>Saldo actual ($)</span>
-              <input :value="evalCalculatorBalance" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorBalance = parseCalcNumber($event.target.value)" />
-            </label>
-            <label class="calc-field">
-              <span>Objetivo ($)</span>
-              <input :value="evalCalculatorTarget" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorTarget = parseCalcNumber($event.target.value)" />
-            </label>
-            <label class="calc-field">
-              <span>Riesgo por trade ($)</span>
-              <input :value="evalCalculatorRiskAmount" class="eval-control" type="number" min="0.1" step="0.1" @input="evalCalculatorRiskAmount = parseCalcNumber($event.target.value)" />
-            </label>
-            <label class="calc-field">
-              <span>Trades para lograrlo</span>
-              <input :value="evalCalculatorTrades" class="eval-control" type="number" min="1" step="1" @input="evalCalculatorTrades = parseCalcNumber($event.target.value)" />
-            </label>
-          </div>
-
-          <div class="calc-results">
-            <div class="calc-result-card">
-              <span>Ganancia necesaria</span>
-              <strong>${{ evalCalculatorNeededGain.toFixed(2) }}</strong>
-            </div>
-            <div class="calc-result-card">
-              <span>Crecer el saldo actual para pasar el objetivo</span>
-              <strong>{{ evalCalculatorNeededGainPct.toFixed(2) }}%</strong>
-            </div>
-            <div class="calc-result-card">
-              <span>Riesgo por trade</span>
-              <strong>${{ evalCalculatorRiskAmount.toFixed(2) }}</strong>
-            </div>
-            <div class="calc-result-card">
-              <span>RRR requerido por trade</span>
-              <strong>{{ evalCalculatorRrLabel }}</strong>
-            </div>
-            <div class="calc-result-card">
-              <span>Ganancia por trade</span>
-              <strong>${{ evalCalculatorRewardPerTrade.toFixed(2) }}</strong>
-            </div>
-          </div>
-
-          <p class="calc-footnote">
-            Para pasar tu cuenta en {{ Math.max(1, Math.round(evalCalculatorTrades || 1)) }} trade(s), necesitas un objetivo de {{ evalCalculatorRequiredRewardPct.toFixed(2) }}% por operación, con un RRR de {{ evalCalculatorRrLabel }}. El riesgo por trade se define en dólares según el valor indicado más arriba.
-          </p>
-        </div>
-
         <div class="eval-journal-top">
           <input v-model="tradeDate" class="eval-control" type="date" />
           <select v-model="tradeSession" class="eval-control">
@@ -3889,7 +3964,7 @@ watch(activeSection, (section) => {
             <span class="intro-feature-icon">🧠</span>
             <div>
               <strong>Filtro emocional</strong>
-              <p>Antes de operar, confirma tu estado emocional. Si estás ansioso, la app bloquea la operativa 20 minutos para proteger tu capital.</p>
+              <p>Antes de operar, completa tu checklist emocional. Si el puntaje sale menor a 5, la app bloquea la operativa 30 minutos para proteger tu capital.</p>
             </div>
           </div>
           <div class="intro-feature">
