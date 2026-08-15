@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   trades: {
@@ -11,6 +11,16 @@ const props = defineProps({
     default: 5,
   },
 })
+
+const expandedChart = ref('')
+
+function openChart(chartKey) {
+  expandedChart.value = chartKey
+}
+
+function closeChart() {
+  expandedChart.value = ''
+}
 
 // Calcular métricas principales
 const netPnl = computed(() => {
@@ -73,6 +83,14 @@ const expectancy = computed(() => {
   return (winProbability * avgWin.value) - (loseProbability * avgLoss.value)
 })
 
+const sortedTrades = computed(() => {
+  return [...props.trades].sort((a, b) => {
+    const timeA = new Date(a.tradeDate || a.createdAt).getTime()
+    const timeB = new Date(b.tradeDate || b.createdAt).getTime()
+    return timeA - timeB
+  })
+})
+
 // Calcular Max Drawdown
 const maxDrawdown = computed(() => {
   if (props.trades.length === 0) return 0
@@ -100,13 +118,8 @@ const maxDrawdown = computed(() => {
 const cumulativePnl = computed(() => {
   const data = []
   let running = 0
-  const sortedTrades = [...props.trades].sort((a, b) => {
-    const timeA = new Date(a.tradeDate || a.createdAt).getTime()
-    const timeB = new Date(b.tradeDate || b.createdAt).getTime()
-    return timeA - timeB
-  })
   
-  sortedTrades.forEach((trade) => {
+  sortedTrades.value.forEach((trade) => {
     const tradeUsd = trade.r * (trade.rBase ?? props.oneR)
     running += tradeUsd
     data.push({
@@ -116,6 +129,73 @@ const cumulativePnl = computed(() => {
   })
   
   return data
+})
+
+const scatterData = computed(() => {
+  return sortedTrades.value.map((trade, index) => ({
+    index: index + 1,
+    r: Number(trade.r) || 0,
+    usd: (Number(trade.r) || 0) * (trade.rBase ?? props.oneR),
+    date: new Date(trade.tradeDate || trade.createdAt),
+    session: trade.session || 'Sesion',
+  }))
+})
+
+const scatterYAxis = computed(() => {
+  const values = scatterData.value.map((point) => point.r)
+  if (!values.length) return []
+
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const spread = max - min || 1
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    const value = max - spread * ratio
+    return {
+      value,
+      y: 170 - ratio * 150,
+    }
+  })
+})
+
+const scatterXLabels = computed(() => {
+  if (!scatterData.value.length) return []
+
+  const step = Math.max(1, Math.ceil(scatterData.value.length / 4))
+  return scatterData.value
+    .filter((point, index) => index === 0 || index === scatterData.value.length - 1 || index % step === 0)
+    .map((point, index) => ({
+      label: `#${point.index}`,
+      x: 30 + ((point.index - 1) / Math.max(1, scatterData.value.length - 1)) * 360,
+      key: `${point.index}-${index}`,
+    }))
+})
+
+const scatterZeroY = computed(() => {
+  const values = scatterData.value.map((point) => point.r)
+  if (!values.length) return 170
+
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const range = max - min || 1
+  return 170 - ((0 - min) / range) * 150
+})
+
+const scatterPoints = computed(() => {
+  const values = scatterData.value.map((point) => point.r)
+  if (!values.length) return []
+
+  const min = Math.min(0, ...values)
+  const max = Math.max(0, ...values)
+  const range = max - min || 1
+
+  return scatterData.value.map((point) => ({
+    ...point,
+    x: 30 + ((point.index - 1) / Math.max(1, scatterData.value.length - 1)) * 360,
+    y: 170 - ((point.r - min) / range) * 150,
+    color: point.r >= 0 ? '#4ade80' : '#f87171',
+  }))
 })
 
 // Agrupar por día para gráfico diario
@@ -329,8 +409,28 @@ function formatDateLabel(value) {
     </div>
 
     <div class="charts-grid">
+      <div v-if="expandedChart" class="chart-backdrop" @click="closeChart"></div>
+
       <!-- P&L Acumulado -->
-      <div class="chart-card">
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'cumulative' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico P&L acumulado"
+        @click="openChart('cumulative')"
+        @keydown.enter="openChart('cumulative')"
+        @keydown.space.prevent="openChart('cumulative')"
+      >
+        <button
+          v-if="expandedChart === 'cumulative'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
         <h3>P&L Acumulado</h3>
         <svg class="line-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
@@ -408,7 +508,25 @@ function formatDateLabel(value) {
       </div>
 
       <!-- P&L Diario -->
-      <div class="chart-card">
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'daily' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico P&L diario"
+        @click="openChart('daily')"
+        @keydown.enter="openChart('daily')"
+        @keydown.space.prevent="openChart('daily')"
+      >
+        <button
+          v-if="expandedChart === 'daily'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
         <h3>P&L Diario</h3>
         <svg class="bar-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
@@ -470,8 +588,126 @@ function formatDateLabel(value) {
         </svg>
       </div>
 
+      <!-- Gráfico de Dispersión -->
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'scatter' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico de dispersión"
+        @click="openChart('scatter')"
+        @keydown.enter="openChart('scatter')"
+        @keydown.space.prevent="openChart('scatter')"
+      >
+        <button
+          v-if="expandedChart === 'scatter'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
+        <h3>Dispersión por Trade (R)</h3>
+        <div class="chart-summary">Cada punto representa un trade cerrado</div>
+        <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
+          <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
+          <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
+
+          <g v-if="scatterYAxis.length">
+            <line
+              v-for="(tick, i) in scatterYAxis"
+              :key="`scatter-grid-${i}`"
+              :x1="30"
+              :x2="390"
+              :y1="tick.y"
+              :y2="tick.y"
+              stroke="#334155"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+            />
+            <text
+              v-for="(tick, i) in scatterYAxis"
+              :key="`scatter-y-${i}`"
+              x="6"
+              :y="tick.y + 4"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="start"
+            >
+              {{ tick.value.toFixed(1) }}R
+            </text>
+          </g>
+
+          <line
+            v-if="scatterPoints.length"
+            x1="30"
+            x2="390"
+            :y1="scatterZeroY"
+            :y2="scatterZeroY"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-dasharray="5 4"
+            opacity="0.75"
+          />
+
+          <g v-if="scatterPoints.length">
+            <circle
+              v-for="point in scatterPoints"
+              :key="point.index"
+              :cx="point.x"
+              :cy="point.y"
+              :r="point.r === 0 ? 4 : 5"
+              :fill="point.color"
+              stroke="#0f172a"
+              stroke-width="1.5"
+              opacity="0.9"
+            >
+              <title>
+                Trade #{{ point.index }} · {{ point.r.toFixed(2) }}R · {{ formatUsd(point.usd) }} · {{ formatDateLabel(point.date) }}
+              </title>
+            </circle>
+          </g>
+
+          <g v-if="scatterXLabels.length">
+            <text
+              v-for="label in scatterXLabels"
+              :key="label.key"
+              :x="label.x"
+              y="190"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="middle"
+            >
+              {{ label.label }}
+            </text>
+          </g>
+
+          <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">R</text>
+          <text x="340" y="188" fill="#94a3b8" font-size="10" font-weight="600">Trades</text>
+        </svg>
+      </div>
+
       <!-- Distribución de Resultados -->
-      <div class="chart-card">
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'distribution' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico de distribución de resultados"
+        @click="openChart('distribution')"
+        @keydown.enter="openChart('distribution')"
+        @keydown.space.prevent="openChart('distribution')"
+      >
+        <button
+          v-if="expandedChart === 'distribution'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
         <h3>Distribución de Resultados (R)</h3>
         <div class="chart-summary">Total de trades: {{ totalTrades }}</div>
         <svg class="pie-chart" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
@@ -557,6 +793,7 @@ function formatDateLabel(value) {
 }
 
 .chart-card {
+  position: relative;
   background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8));
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.75rem;
@@ -564,6 +801,68 @@ function formatDateLabel(value) {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.chart-card--clickable {
+  cursor: zoom-in;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.chart-card--clickable:hover,
+.chart-card--clickable:focus-visible {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.28);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.chart-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.chart-card--expanded {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 90;
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 1.25rem;
+  cursor: default;
+  transform: translate(-50%, -50%);
+  border-color: rgba(96, 165, 250, 0.65);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+}
+
+.chart-card--expanded:hover,
+.chart-card--expanded:focus-visible {
+  transform: translate(-50%, -50%);
+}
+
+.chart-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chart-close:hover {
+  border-color: rgba(248, 113, 113, 0.65);
+  color: #fecaca;
 }
 
 .chart-card h3 {
@@ -577,10 +876,21 @@ function formatDateLabel(value) {
 
 .line-chart,
 .bar-chart,
+.scatter-chart,
 .pie-chart {
   width: 100%;
   height: auto;
   max-height: 200px;
+}
+
+.chart-card--expanded .line-chart,
+.chart-card--expanded .bar-chart,
+.chart-card--expanded .scatter-chart {
+  max-height: min(68vh, 620px);
+}
+
+.chart-card--expanded .pie-chart {
+  max-height: min(52vh, 460px);
 }
 
 .pie-legend {
@@ -629,6 +939,12 @@ function formatDateLabel(value) {
 
   .charts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-card--expanded {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    padding: 1rem;
   }
 }
 </style>

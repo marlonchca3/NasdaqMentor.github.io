@@ -1176,10 +1176,75 @@ const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
 const showBigFiveTest = ref(false)
 const weeklyDisciplineBarRef = ref(null)
 const operationLockUntil = ref(0)
+const operationLockStorageKey = 'nasdaq-mentor-operation-lock-until'
+const emotionalChecklistStorageKey = 'nasdaq-mentor-emotional-checklist'
 
 function applyOperationLock(minutes) {
   const nextLockUntil = Date.now() + (minutes * 60 * 1000)
   operationLockUntil.value = Math.max(operationLockUntil.value, nextLockUntil)
+}
+
+function loadOperationLock() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const savedLockUntil = Number(localStorage.getItem(operationLockStorageKey))
+  if (Number.isFinite(savedLockUntil) && savedLockUntil > Date.now()) {
+    operationLockUntil.value = savedLockUntil
+    return
+  }
+
+  localStorage.removeItem(operationLockStorageKey)
+}
+
+function persistOperationLock() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  if (operationLockUntil.value > Date.now()) {
+    localStorage.setItem(operationLockStorageKey, String(operationLockUntil.value))
+  } else {
+    localStorage.removeItem(operationLockStorageKey)
+  }
+}
+
+function loadEmotionalChecklist() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const raw = localStorage.getItem(emotionalChecklistStorageKey)
+    if (!raw) {
+      return
+    }
+
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') {
+      return
+    }
+
+    const nextChecklist = {}
+    emotionalChecklistOptions.forEach((row) => {
+      const value = Number(parsed[row.key])
+      if (row.options.some((option) => option.score === value)) {
+        nextChecklist[row.key] = value
+      }
+    })
+    emotionalChecklist.value = nextChecklist
+  } catch {
+    localStorage.removeItem(emotionalChecklistStorageKey)
+  }
+}
+
+function persistEmotionalChecklist() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  localStorage.setItem(emotionalChecklistStorageKey, JSON.stringify(emotionalChecklist.value))
 }
 
 const operationLockRemainingMs = computed(() =>
@@ -1351,6 +1416,10 @@ const weeklyDisciplinePercent = computed(() =>
 function getOperationLockMessage() {
   if (operationLockRemainingMs.value > 0) {
     return `Operativa bloqueada. Espera ${operationLockCountdown.value} antes de guardar otro trade.`
+  }
+
+  if (emotionalChecklistComplete.value && emotionalChecklistScore.value < 5) {
+    return 'Operativa bloqueada por checklist emocional menor a 5. Actualiza el checklist cuando estes en condiciones de operar.'
   }
 
   if (dailyLossLimitReached.value) {
@@ -2318,6 +2387,14 @@ watch(tasks, () => {
   }
 }, { deep: true })
 
+watch(emotionalChecklist, () => {
+  persistEmotionalChecklist()
+}, { deep: true })
+
+watch(operationLockUntil, () => {
+  persistOperationLock()
+})
+
 watch(taskInput, () => {
   if (taskError.value) {
     taskError.value = ''
@@ -2393,6 +2470,12 @@ onUnmounted(() => {
 
 onMounted(() => {
   initTheme()
+  loadEmotionalChecklist()
+  loadOperationLock()
+
+  if (emotionalChecklistComplete.value && emotionalChecklistScore.value < 5 && operationLockRemainingMs.value > 0) {
+    emotionalLowScoreLockActive.value = true
+  }
 
   if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', handlePageHide)

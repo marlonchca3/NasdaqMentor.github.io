@@ -1950,7 +1950,13 @@ h1 {
   text-align: left;
   font-size: 0.88rem;
   font-weight: 500;
+  line-height: 1.25;
   transition: filter 0.18s ease, outline-color 0.18s ease, transform 0.18s ease;
+}
+
+.emotional-checklist-cell span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .emotional-checklist-cell:hover {
@@ -2697,6 +2703,10 @@ h1 {
     flex: 1 1 220px;
   }
 
+  .emotional-score {
+    width: 100%;
+  }
+
   .compliance-cards {
     grid-template-columns: 1fr;
   }
@@ -2726,6 +2736,47 @@ h1 {
 @media (max-width: 720px) {
   .eval-panel {
     padding: 16px;
+  }
+
+  .emotional-checklist-table {
+    gap: 10px;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .emotional-checklist-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 42px;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: rgba(2, 8, 23, 0.5);
+  }
+
+  .emotional-checklist-footer {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .emotional-checklist-cell {
+    min-height: 72px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 8px;
+    font-size: 0.8rem;
+  }
+
+  .emotional-checklist-cell strong {
+    align-self: flex-end;
+  }
+
+  .emotional-checklist-value,
+  .emotional-checklist-total {
+    min-height: 72px;
+  }
+
+  .emotional-checklist-band {
+    min-height: 36px;
   }
 
   .eval-meta-top {
@@ -2801,6 +2852,26 @@ h1 {
     border-radius: 18px;
   }
 
+  .emotional-score {
+    grid-template-columns: minmax(0, 1fr) 42px;
+    min-width: 0;
+  }
+
+  .emotional-checklist-row {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .emotional-checklist-value {
+    grid-column: 1 / -1;
+    min-height: 34px;
+  }
+
+  .emotional-checklist-cell {
+    min-height: 96px;
+    padding: 7px;
+    font-size: 0.76rem;
+  }
+
   .sync-panel {
     padding: 1.1rem 1rem;
     border-radius: 18px;
@@ -2844,6 +2915,33 @@ h1 {
   .emotional-btn,
   .eval-risk-reset-pill {
     width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .emotional-checklist-row {
+    grid-template-columns: 1fr;
+  }
+
+  .emotional-checklist-cell {
+    min-height: 48px;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px;
+    font-size: 0.82rem;
+  }
+
+  .emotional-checklist-cell strong {
+    align-self: center;
+  }
+
+  .emotional-checklist-value {
+    grid-column: auto;
+  }
+
+  .emotional-checklist-value,
+  .emotional-checklist-total {
+    min-height: 38px;
   }
 }
 
