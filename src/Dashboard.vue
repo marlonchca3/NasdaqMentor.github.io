@@ -198,6 +198,82 @@ const scatterPoints = computed(() => {
   }))
 })
 
+const hourPnlData = computed(() => {
+  return sortedTrades.value.map((trade, index) => {
+    const date = new Date(trade.createdAt || trade.tradeDate)
+    const hour = Number.isFinite(date.getTime())
+      ? date.getHours() + (date.getMinutes() / 60)
+      : 0
+    const r = Number(trade.r) || 0
+    const risk = Number(trade.rBase ?? props.oneR) || props.oneR
+    const usd = r * risk
+
+    return {
+      index: index + 1,
+      hour,
+      usd,
+      r,
+      date,
+      color: usd >= 0 ? '#4ade80' : '#f87171',
+    }
+  })
+})
+
+const hourPnlYAxis = computed(() => buildValueAxis(hourPnlData.value.map((point) => point.usd)))
+
+const hourPnlXLabels = computed(() => {
+  return [0, 6, 12, 18, 24].map((hour) => ({
+    label: `${String(hour).padStart(2, '0')}:00`,
+    x: 30 + (hour / 24) * 360,
+  }))
+})
+
+const hourPnlZeroY = computed(() => valueToChartY(0, hourPnlData.value.map((point) => point.usd)))
+
+const hourPnlPoints = computed(() => {
+  const values = hourPnlData.value.map((point) => point.usd)
+  if (!values.length) return []
+
+  return hourPnlData.value.map((point) => ({
+    ...point,
+    x: 30 + (point.hour / 24) * 360,
+    y: valueToChartY(point.usd, values),
+  }))
+})
+
+const riskPnlData = computed(() => {
+  return sortedTrades.value.map((trade, index) => {
+    const risk = Number(trade.rBase ?? props.oneR) || props.oneR
+    const r = Number(trade.r) || 0
+    const usd = r * risk
+
+    return {
+      index: index + 1,
+      risk,
+      usd,
+      r,
+      date: new Date(trade.tradeDate || trade.createdAt),
+      color: usd >= 0 ? '#4ade80' : '#f87171',
+    }
+  })
+})
+
+const riskPnlYAxis = computed(() => buildValueAxis(riskPnlData.value.map((point) => point.usd)))
+const riskPnlXAxis = computed(() => buildHorizontalAxis(riskPnlData.value.map((point) => point.risk)))
+const riskPnlZeroY = computed(() => valueToChartY(0, riskPnlData.value.map((point) => point.usd)))
+
+const riskPnlPoints = computed(() => {
+  const xValues = riskPnlData.value.map((point) => point.risk)
+  const yValues = riskPnlData.value.map((point) => point.usd)
+  if (!xValues.length || !yValues.length) return []
+
+  return riskPnlData.value.map((point) => ({
+    ...point,
+    x: valueToChartX(point.risk, xValues),
+    y: valueToChartY(point.usd, yValues),
+  }))
+})
+
 // Agrupar por día para gráfico diario
 const dailyPnl = computed(() => {
   const byDate = {}
@@ -326,6 +402,72 @@ const dailyXLabels = computed(() => {
     }))
 })
 
+function getChartBounds(values, includeZero = true) {
+  if (!values.length) {
+    return { min: 0, max: 1, range: 1 }
+  }
+
+  const min = includeZero ? Math.min(0, ...values) : Math.min(...values)
+  const max = includeZero ? Math.max(0, ...values) : Math.max(...values)
+  const range = max - min || 1
+  return { min, max, range }
+}
+
+function buildValueAxis(values) {
+  if (!values.length) return []
+
+  const { max, range } = getChartBounds(values)
+  return Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    const value = max - range * ratio
+    return {
+      value,
+      y: 170 - ratio * 150,
+    }
+  })
+}
+
+function buildHorizontalAxis(values) {
+  if (!values.length) return []
+
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (min === max) {
+    return [{
+      value: min,
+      x: 210,
+      label: formatAxisUsd(min),
+    }]
+  }
+
+  const range = max - min
+  return Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4
+    const value = min + range * ratio
+    return {
+      value,
+      x: 30 + ratio * 360,
+      label: formatAxisUsd(value),
+    }
+  })
+}
+
+function valueToChartY(value, values) {
+  const { min, range } = getChartBounds(values)
+  return 170 - ((value - min) / range) * 150
+}
+
+function valueToChartX(value, values) {
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (min === max) {
+    return 210
+  }
+
+  const range = max - min
+  return 30 + ((value - min) / range) * 360
+}
+
 // Formatear valores USD
 function formatUsd(value) {
   return new Intl.NumberFormat('es-AR', {
@@ -347,6 +489,14 @@ function formatDateLabel(value) {
     month: 'short',
     day: 'numeric',
   }).format(new Date(value))
+}
+
+function formatHourLabel(value) {
+  const hour = Math.floor(value)
+  const minutes = Math.round((value - hour) * 60)
+  const normalizedHour = minutes === 60 ? hour + 1 : hour
+  const normalizedMinutes = minutes === 60 ? 0 : minutes
+  return `${String(normalizedHour).padStart(2, '0')}:${String(normalizedMinutes).padStart(2, '0')}`
 }
 </script>
 
@@ -685,6 +835,198 @@ function formatDateLabel(value) {
 
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">R</text>
           <text x="340" y="188" fill="#94a3b8" font-size="10" font-weight="600">Trades</text>
+        </svg>
+      </div>
+
+      <!-- Hora de entrada vs P&L -->
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'hour-pnl' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico hora de entrada contra P&L"
+        @click="openChart('hour-pnl')"
+        @keydown.enter="openChart('hour-pnl')"
+        @keydown.space.prevent="openChart('hour-pnl')"
+      >
+        <button
+          v-if="expandedChart === 'hour-pnl'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
+        <h3>Hora de Entrada vs P&L</h3>
+        <div class="chart-summary">Puntos por hora de creación del trade</div>
+        <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
+          <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
+          <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
+
+          <g v-if="hourPnlYAxis.length">
+            <line
+              v-for="(tick, i) in hourPnlYAxis"
+              :key="`hour-grid-${i}`"
+              :x1="30"
+              :x2="390"
+              :y1="tick.y"
+              :y2="tick.y"
+              stroke="#334155"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+            />
+            <text
+              v-for="(tick, i) in hourPnlYAxis"
+              :key="`hour-y-${i}`"
+              x="6"
+              :y="tick.y + 4"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="start"
+            >
+              {{ formatAxisUsd(tick.value) }}
+            </text>
+          </g>
+
+          <line
+            v-if="hourPnlPoints.length"
+            x1="30"
+            x2="390"
+            :y1="hourPnlZeroY"
+            :y2="hourPnlZeroY"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-dasharray="5 4"
+            opacity="0.75"
+          />
+
+          <circle
+            v-for="point in hourPnlPoints"
+            :key="`hour-point-${point.index}`"
+            :cx="point.x"
+            :cy="point.y"
+            r="5"
+            :fill="point.color"
+            stroke="#0f172a"
+            stroke-width="1.5"
+            opacity="0.9"
+          >
+            <title>
+              Trade #{{ point.index }} · {{ formatHourLabel(point.hour) }} · {{ formatUsd(point.usd) }} · {{ point.r.toFixed(2) }}R
+            </title>
+          </circle>
+
+          <text
+            v-for="label in hourPnlXLabels"
+            :key="`hour-x-${label.label}`"
+            :x="label.x"
+            y="190"
+            fill="#cbd5e1"
+            font-size="9"
+            text-anchor="middle"
+          >
+            {{ label.label }}
+          </text>
+
+          <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
+          <text x="340" y="188" fill="#94a3b8" font-size="10" font-weight="600">Hora</text>
+        </svg>
+      </div>
+
+      <!-- Riesgo vs P&L -->
+      <div
+        class="chart-card chart-card--clickable"
+        :class="{ 'chart-card--expanded': expandedChart === 'risk-pnl' }"
+        role="button"
+        tabindex="0"
+        aria-label="Ampliar gráfico riesgo contra P&L"
+        @click="openChart('risk-pnl')"
+        @keydown.enter="openChart('risk-pnl')"
+        @keydown.space.prevent="openChart('risk-pnl')"
+      >
+        <button
+          v-if="expandedChart === 'risk-pnl'"
+          class="chart-close"
+          type="button"
+          aria-label="Cerrar gráfico ampliado"
+          @click.stop="closeChart"
+        >
+          ×
+        </button>
+        <h3>Riesgo vs P&L</h3>
+        <div class="chart-summary">Riesgo tomado desde el valor de 1R</div>
+        <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
+          <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
+          <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
+
+          <g v-if="riskPnlYAxis.length">
+            <line
+              v-for="(tick, i) in riskPnlYAxis"
+              :key="`risk-grid-${i}`"
+              :x1="30"
+              :x2="390"
+              :y1="tick.y"
+              :y2="tick.y"
+              stroke="#334155"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+            />
+            <text
+              v-for="(tick, i) in riskPnlYAxis"
+              :key="`risk-y-${i}`"
+              x="6"
+              :y="tick.y + 4"
+              fill="#cbd5e1"
+              font-size="9"
+              text-anchor="start"
+            >
+              {{ formatAxisUsd(tick.value) }}
+            </text>
+          </g>
+
+          <line
+            v-if="riskPnlPoints.length"
+            x1="30"
+            x2="390"
+            :y1="riskPnlZeroY"
+            :y2="riskPnlZeroY"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-dasharray="5 4"
+            opacity="0.75"
+          />
+
+          <circle
+            v-for="point in riskPnlPoints"
+            :key="`risk-point-${point.index}`"
+            :cx="point.x"
+            :cy="point.y"
+            r="5"
+            :fill="point.color"
+            stroke="#0f172a"
+            stroke-width="1.5"
+            opacity="0.9"
+          >
+            <title>
+              Trade #{{ point.index }} · Riesgo {{ formatUsd(point.risk) }} · {{ formatUsd(point.usd) }} · {{ point.r.toFixed(2) }}R
+            </title>
+          </circle>
+
+          <text
+            v-for="label in riskPnlXAxis"
+            :key="`risk-x-${label.value}`"
+            :x="label.x"
+            y="190"
+            fill="#cbd5e1"
+            font-size="9"
+            text-anchor="middle"
+          >
+            {{ label.label }}
+          </text>
+
+          <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
+          <text x="338" y="188" fill="#94a3b8" font-size="10" font-weight="600">Riesgo</text>
         </svg>
       </div>
 
