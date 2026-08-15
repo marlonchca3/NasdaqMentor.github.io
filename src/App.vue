@@ -978,6 +978,8 @@ function clearTradeForm() {
   tradeExitTactic.value = ''
   tradeInput.value = ''
   tradeCompliance.value = null
+  emotionalChecklist.value = {}
+  emotionalLowScoreLockActive.value = false
   tradeError.value = ''
 }
 
