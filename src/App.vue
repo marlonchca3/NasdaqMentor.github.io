@@ -643,6 +643,7 @@ onUnmounted(() => {
 const evalOneR = ref(5)
 const evalObjetivo = ref(58000)
 const maxDailyLossUSD = ref(15)
+const maxDailyLossInput = ref('15')
 const evalCalculatorBalance = ref(0)
 const evalCalculatorTarget = ref(0)
 // Riesgo por trade en USD (antes era porcentaje)
@@ -663,6 +664,43 @@ const dayNotes = ref([])
 function parseCalcNumber(value) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function clampDailyLoss(value) {
+  return Math.min(1000000, Math.max(1, Math.round(value * 100) / 100))
+}
+
+function onMaxDailyLossInput(event) {
+  const value = event.target.value
+  maxDailyLossInput.value = value
+
+  if (value === '') {
+    return
+  }
+
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return
+  }
+
+  maxDailyLossUSD.value = clampDailyLoss(parsed)
+}
+
+function commitMaxDailyLossInput() {
+  if (maxDailyLossInput.value === '') {
+    maxDailyLossInput.value = String(maxDailyLossUSD.value)
+    return
+  }
+
+  const parsed = Number(maxDailyLossInput.value)
+  if (!Number.isFinite(parsed)) {
+    maxDailyLossInput.value = String(maxDailyLossUSD.value)
+    return
+  }
+
+  const clamped = clampDailyLoss(parsed)
+  maxDailyLossUSD.value = clamped
+  maxDailyLossInput.value = String(clamped)
 }
 const pendingTrades = ref([])
 const savingTrade = ref(false)
@@ -2434,7 +2472,13 @@ watch(maxDailyLossUSD, (value) => {
     return
   }
 
-  maxDailyLossUSD.value = Math.min(1000000, Math.max(1, Math.round(value * 100) / 100))
+  const clamped = clampDailyLoss(value)
+  if (clamped !== value) {
+    maxDailyLossUSD.value = clamped
+    return
+  }
+
+  maxDailyLossInput.value = String(clamped)
 })
 
 watch([evalOneR, evalObjetivo, maxDailyLossUSD], () => {
@@ -3099,6 +3143,17 @@ function openSection(id) {
   closeSidebarOnMobile()
 }
 
+function openNewTrade() {
+  activeSection.value = 'evaluacion'
+
+  nextTick(() => {
+    const emotionalChecklist = document.getElementById('checklist-emocional')
+    emotionalChecklist?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+
+  closeSidebarOnMobile()
+}
+
 watch(activeSection, (section) => {
   if (section === 'mercado' && !marketNews.value.length && !marketNewsLoading.value) {
     fetchMarketNews()
@@ -3143,6 +3198,12 @@ watch(activeSection, (section) => {
     <nav class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
       <div class="sidebar-brand">📈 NasdaqMentor</div>
       <ul class="sidebar-menu">
+        <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openNewTrade">
+            <span class="sidebar-icon">➕</span>
+            <span class="sidebar-label">Nuevo trade</span>
+          </button>
+        </li>
         <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'checklist' }" @click="openSection('checklist')">
             <span class="sidebar-icon">✅</span>
@@ -3423,7 +3484,7 @@ watch(activeSection, (section) => {
       <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">
 
         <!-- ── Checklist emocional ── -->
-        <div class="filter-section">
+        <div id="checklist-emocional" class="filter-section">
           <div class="filter-section-head">
             <div>
               <p class="filter-eyebrow">Checklist Emocional</p>
@@ -3532,7 +3593,18 @@ watch(activeSection, (section) => {
           </div>
           <div class="eval-meta-field">
             <label for="daily-loss-selector" class="eval-meta-label">Pérdida diaria máxima ($)</label>
-            <input id="daily-loss-selector" v-model.number="maxDailyLossUSD" class="eval-control eval-meta-input" type="number" min="1" max="1000000" step="1" @change="scheduleEvalSettingsSave" />
+            <input
+              id="daily-loss-selector"
+              :value="maxDailyLossInput"
+              class="eval-control eval-meta-input"
+              type="number"
+              min="1"
+              max="1000000"
+              step="1"
+              @input="onMaxDailyLossInput"
+              @change="commitMaxDailyLossInput"
+              @blur="commitMaxDailyLossInput"
+            />
           </div>
         </div>
         <div class="eval-objetivo-bar">
@@ -3563,7 +3635,7 @@ watch(activeSection, (section) => {
             <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185' }"></div>
           </div>
         </div>
-        <div class="eval-journal-top">
+        <div id="nuevo-trade-form" class="eval-journal-top">
           <input v-model="tradeDate" class="eval-control" type="date" />
           <select v-model="tradeSession" class="eval-control">
             <option>Sesion</option>
