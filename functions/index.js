@@ -85,7 +85,7 @@ exports.ninjaExecution = onRequest(
 
           price: Number(price || 0),
 
-          commission: Number(commission || 0),
+          commission: Math.abs(Number(commission || 0)),
 
           executionId,
 
