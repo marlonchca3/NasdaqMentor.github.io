@@ -650,6 +650,9 @@ const evalCalculatorTarget = ref(0)
 const evalCalculatorRiskAmount = ref(1)
 const evalCalculatorTrades = ref(1)
 const tradesList = ref([])
+const firestoreTradesList = ref([])
+const ninjaExecutionList = ref([])
+const ninjaTradesList = ref([])
 const pnlChartRef = ref(null)
 const chartFileInput = ref(null)
 const uploadTargetDate = ref(null)
@@ -727,6 +730,7 @@ const editingTradeDraft = ref(null)
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
 let unsubscribeEvalTrades = null
+let unsubscribeNinjaExecutions = null
 let unsubscribeEvalCharts = null
 let evalSaveTimer = null
 
@@ -761,6 +765,23 @@ function formatTimeFromDate(date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function formatDuration(ms) {
+  const totalSeconds = Math.max(0, Math.round(Number(ms || 0) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m`
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+  }
+
+  return `${seconds}s`
+}
+
 function normalizeDate(value) {
   if (typeof value === 'string') {
     const localDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
@@ -790,6 +811,197 @@ function normalizeFirestoreDate(value) {
   }
 
   return normalizeDate(value)
+}
+
+function getInstrumentPointValue(instrument = '') {
+  const symbol = String(instrument).toUpperCase()
+
+  if (symbol.startsWith('MNQ')) return 2
+  if (symbol.startsWith('NQ')) return 20
+  if (symbol.startsWith('MES')) return 5
+  if (symbol.startsWith('ES')) return 50
+  if (symbol.startsWith('MYM')) return 0.5
+  if (symbol.startsWith('YM')) return 5
+  if (symbol.startsWith('M2K')) return 5
+  if (symbol.startsWith('RTY')) return 50
+
+  return 1
+}
+
+function normalizeNinjaAction(action = '') {
+  return String(action).replace(/\s+/g, '').toLowerCase()
+}
+
+function getNinjaExecutionDate(execution) {
+  return normalizeDate(execution.executionTime || execution.createdAt)
+}
+
+function isNinjaEntryAction(action) {
+  return action === 'buy' || action === 'sellshort'
+}
+
+function getNinjaSideFromAction(action) {
+  if (action === 'buy') return 'LONG'
+  if (action === 'sellshort') return 'SHORT'
+  return ''
+}
+
+function createNinjaTradeDraft(execution, action, executionDate) {
+  return {
+    side: getNinjaSideFromAction(action),
+    instrument: execution.instrument || '',
+    startedAt: executionDate,
+    endedAt: executionDate,
+    entryQuantity: 0,
+    exitQuantity: 0,
+    entryValue: 0,
+    exitValue: 0,
+    commission: 0,
+    executionIds: [],
+    orderIds: [],
+  }
+}
+
+function addNinjaExecutionToDraft(draft, execution, action, executionDate) {
+  const quantity = Math.abs(Number(execution.quantity || 0))
+  const price = Number(execution.price || 0)
+  const commission = Number(execution.commission || 0)
+
+  if (!quantity || !Number.isFinite(price)) {
+    return
+  }
+
+  draft.endedAt = executionDate || draft.endedAt
+  draft.commission += Number.isFinite(commission) ? commission : 0
+  draft.executionIds.push(String(execution.executionId || execution.id || ''))
+
+  if (execution.orderId) {
+    draft.orderIds.push(String(execution.orderId))
+  }
+
+  if (draft.side === 'LONG') {
+    if (action === 'buy') {
+      draft.entryQuantity += quantity
+      draft.entryValue += price * quantity
+    } else if (action === 'sell') {
+      draft.exitQuantity += quantity
+      draft.exitValue += price * quantity
+    }
+    return
+  }
+
+  if (draft.side === 'SHORT') {
+    if (action === 'sellshort') {
+      draft.entryQuantity += quantity
+      draft.entryValue += price * quantity
+    } else if (action === 'buytocover') {
+      draft.exitQuantity += quantity
+      draft.exitValue += price * quantity
+    }
+  }
+}
+
+function buildClosedNinjaTrade(draft) {
+  const closedQuantity = Math.min(draft.entryQuantity, draft.exitQuantity)
+  if (!closedQuantity) {
+    return null
+  }
+
+  const entryPrice = draft.entryValue / draft.entryQuantity
+  const exitPrice = draft.exitValue / draft.exitQuantity
+  const pointValue = getInstrumentPointValue(draft.instrument)
+  const grossPnl = draft.side === 'LONG'
+    ? (exitPrice - entryPrice) * closedQuantity * pointValue
+    : (entryPrice - exitPrice) * closedQuantity * pointValue
+  const pnl = grossPnl - draft.commission
+  const rBase = Number.isFinite(evalOneR.value) && evalOneR.value > 0 ? evalOneR.value : 1
+  const startedAt = draft.startedAt || draft.endedAt || new Date()
+  const endedAt = draft.endedAt || startedAt
+  const durationMs = Math.max(0, endedAt.getTime() - startedAt.getTime())
+  const executionKey = draft.executionIds.filter(Boolean).join('_') || `${draft.instrument}_${endedAt.getTime()}`
+
+  return {
+    id: `ninja-${executionKey}`,
+    source: 'ninjatrader',
+    r: pnl / rBase,
+    rBase,
+    session: 'NinjaTrader',
+    rules: 1,
+    note: `${draft.instrument || 'Instrumento'} ${draft.side} ${pnl >= 0 ? 'WIN' : 'LOSS'}`,
+    exitTactic: pnl >= 0 ? 'WIN' : 'LOSS',
+    tradeDate: endedAt,
+    createdAt: endedAt,
+    clientId: null,
+    compliance: null,
+    chartUrl: null,
+    instrument: draft.instrument,
+    side: draft.side,
+    contracts: closedQuantity,
+    entryPrice,
+    exitPrice,
+    pnl,
+    commission: draft.commission,
+    durationMs,
+    result: pnl >= 0 ? 'WIN' : 'LOSS',
+    executionIds: draft.executionIds.filter(Boolean),
+    orderIds: [...new Set(draft.orderIds.filter(Boolean))],
+  }
+}
+
+function buildNinjaTradesFromExecutions(executions) {
+  const sortedExecutions = [...executions].sort((a, b) => {
+    const ta = getNinjaExecutionDate(a)?.getTime() ?? 0
+    const tb = getNinjaExecutionDate(b)?.getTime() ?? 0
+    return ta - tb
+  })
+
+  const trades = []
+  const draftsByInstrument = new Map()
+
+  sortedExecutions.forEach((execution) => {
+    const action = normalizeNinjaAction(execution.action)
+    const executionDate = getNinjaExecutionDate(execution) || new Date()
+    const draftKey = `${execution.account || ''}::${execution.instrument || ''}`
+    let draft = draftsByInstrument.get(draftKey) || null
+
+    if (!draft && isNinjaEntryAction(action)) {
+      draft = createNinjaTradeDraft(execution, action, executionDate)
+      draftsByInstrument.set(draftKey, draft)
+    }
+
+    if (!draft) {
+      return
+    }
+
+    addNinjaExecutionToDraft(draft, execution, action, executionDate)
+
+    if (Number(execution.position || 0) === 0 && draft.exitQuantity > 0) {
+      const closedTrade = buildClosedNinjaTrade(draft)
+      if (closedTrade) {
+        trades.push(closedTrade)
+      }
+      draftsByInstrument.delete(draftKey)
+    }
+  })
+
+  return trades
+}
+
+function syncCombinedTrades() {
+  const nextTrades = user.value
+    ? [...firestoreTradesList.value, ...ninjaTradesList.value]
+    : tradesList.value
+
+  tradesList.value = nextTrades.sort((a, b) => {
+    const ta = normalizeDate(a.createdAt)?.getTime() ?? 0
+    const tb = normalizeDate(b.createdAt)?.getTime() ?? 0
+    return tb - ta
+  })
+}
+
+function refreshNinjaTrades() {
+  ninjaTradesList.value = buildNinjaTradesFromExecutions(ninjaExecutionList.value)
+  syncCombinedTrades()
 }
 
 function dateKey(value) {
@@ -1028,7 +1240,7 @@ async function clearAllTrades() {
 
   if (user.value) {
     const batch = writeBatch(db)
-    tradesList.value.forEach((trade) => {
+    firestoreTradesList.value.forEach((trade) => {
       batch.delete(doc(db, 'users', user.value.uid, 'trades', trade.id))
     })
     await batch.commit()
@@ -1748,6 +1960,10 @@ function stopEvalSubscription() {
     unsubscribeEvalTrades()
     unsubscribeEvalTrades = null
   }
+  if (unsubscribeNinjaExecutions) {
+    unsubscribeNinjaExecutions()
+    unsubscribeNinjaExecutions = null
+  }
 
   if (typeof unsubscribeEvalCharts !== 'undefined' && unsubscribeEvalCharts) {
     unsubscribeEvalCharts()
@@ -1755,6 +1971,9 @@ function stopEvalSubscription() {
   }
 
   pendingTrades.value = []
+  firestoreTradesList.value = []
+  ninjaExecutionList.value = []
+  ninjaTradesList.value = []
 }
 
 function subscribeToEval(userId) {
@@ -1799,7 +2018,8 @@ function subscribeToEval(userId) {
         return tb - ta
       })
 
-    tradesList.value = nextTrades
+    firestoreTradesList.value = nextTrades
+    syncCombinedTrades()
 
     const confirmedClientIds = new Set(nextTrades.map((trade) => trade.clientId).filter(Boolean))
     if (confirmedClientIds.size) {
@@ -1809,6 +2029,33 @@ function subscribeToEval(userId) {
     }
   }, (err) => {
     console.error('subscribeToEval: trades snapshot error', err)
+  })
+
+  unsubscribeNinjaExecutions = onSnapshot(collection(db, 'users', userId, 'ninjaExecutions'), (snap) => {
+    ninjaExecutionList.value = snap.docs.map((d) => {
+      const data = d.data()
+
+      return {
+        id: d.id,
+        account: data.account ?? '',
+        instrument: data.instrument ?? '',
+        action: data.action ?? '',
+        quantity: Number(data.quantity || 0),
+        price: Number(data.price || 0),
+        commission: Number(data.commission || 0),
+        executionId: data.executionId ?? d.id,
+        orderId: data.orderId ?? '',
+        orderName: data.orderName ?? '',
+        position: Number(data.position || 0),
+        marketPosition: data.marketPosition ?? '',
+        executionTime: normalizeFirestoreDate(data.executionTime),
+        createdAt: normalizeFirestoreDate(data.createdAt) ?? new Date(),
+      }
+    })
+
+    refreshNinjaTrades()
+  }, (err) => {
+    console.error('subscribeToEval: ninja executions snapshot error', err)
   })
 
   // listen to uploaded charts for this user
@@ -2136,6 +2383,11 @@ async function addTrade() {
 }
 
 function startEditTrade(trade) {
+  if (trade.source === 'ninjatrader') {
+    tradeError.value = 'Los trades sincronizados desde NinjaTrader se calculan automaticamente y no se editan aqui.'
+    return
+  }
+
   editingTradeId.value = trade.id
   editingTradeDraft.value = {
     usd: Number.isFinite(trade.rBase) && trade.rBase > 0
@@ -2203,6 +2455,12 @@ async function saveEditedTrade(tradeId) {
 }
 
 async function removeTrade(tradeId) {
+  const currentTrade = tradesList.value.find((trade) => trade.id === tradeId)
+  if (currentTrade?.source === 'ninjatrader') {
+    tradeError.value = 'Los trades de NinjaTrader vienen de ejecuciones sincronizadas y no se borran desde el diario manual.'
+    return
+  }
+
   if (user.value) {
     await deleteDoc(doc(db, 'users', user.value.uid, 'trades', tradeId))
     return
@@ -2483,6 +2741,12 @@ watch(maxDailyLossUSD, (value) => {
 
 watch([evalOneR, evalObjetivo, maxDailyLossUSD], () => {
   scheduleEvalSettingsSave()
+})
+
+watch(evalOneR, () => {
+  if (ninjaExecutionList.value.length) {
+    refreshNinjaTrades()
+  }
 })
 
 watch(theme, (newTheme) => {
@@ -3734,8 +3998,21 @@ watch(activeSection, (section) => {
                     </template>
                   </td>
                   <td :class="trade.r > 0 ? 'pos' : (trade.r < 0 ? 'neg' : '')">{{ trade.r > 0 ? '+' : '' }}{{ trade.r.toFixed(2) }}R</td>
-                  <td>{{ trade.session || 'Sesion' }}</td>
-                  <td>{{ trade.note || '-' }}</td>
+                  <td>
+                    {{ trade.session || 'Sesion' }}
+                    <span v-if="trade.source === 'ninjatrader'" style="display:block;font-size:0.78em;opacity:0.7;">NinjaTrader</span>
+                  </td>
+                  <td>
+                    <template v-if="trade.source === 'ninjatrader'">
+                      {{ trade.instrument || '-' }} {{ trade.side || '' }} · {{ trade.contracts || 0 }} contrato{{ trade.contracts === 1 ? '' : 's' }}
+                      <span style="display:block;font-size:0.82em;opacity:0.72;">
+                        Entrada {{ Number(trade.entryPrice || 0).toFixed(2) }} · Salida {{ Number(trade.exitPrice || 0).toFixed(2) }} · Comisión ${{ Number(trade.commission || 0).toFixed(2) }} · {{ formatDuration(trade.durationMs) }}
+                      </span>
+                    </template>
+                    <template v-else>
+                      {{ trade.note || '-' }}
+                    </template>
+                  </td>
                   <td>{{ trade.exitTactic || '-' }}</td>
                   <td>
                     {{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}
@@ -3743,8 +4020,13 @@ watch(activeSection, (section) => {
                   </td>
                   <td>
                     <div class="eval-inline-actions">
-                      <button class="eval-edit-btn" @click="startEditTrade(trade)">Editar</button>
-                      <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
+                      <template v-if="trade.source === 'ninjatrader'">
+                        <span style="font-size:0.82em;opacity:0.7;">Auto</span>
+                      </template>
+                      <template v-else>
+                        <button class="eval-edit-btn" @click="startEditTrade(trade)">Editar</button>
+                        <button class="eval-remove-btn" @click="removeTrade(trade.id)">×</button>
+                      </template>
                     </div>
                   </td>
                 </template>
