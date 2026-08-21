@@ -31,6 +31,11 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // Graficos del usuario
+    match /users/{userId}/charts/{chartId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // Ejecuciones sincronizadas desde NinjaTrader.
     // Solo las lee el dueño; las escribe la Firebase Function con Admin SDK.
     match /users/{userId}/ninjaExecutions/{executionId} {
