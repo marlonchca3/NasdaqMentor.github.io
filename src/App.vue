@@ -872,7 +872,7 @@ function addNinjaExecutionToDraft(draft, execution, action, executionDate) {
   }
 
   draft.endedAt = executionDate || draft.endedAt
-  draft.commission += Number.isFinite(commission) ? commission : 0
+  draft.commission += Number.isFinite(commission) ? Math.abs(commission) : 0
   draft.executionIds.push(String(execution.executionId || execution.id || ''))
 
   if (execution.orderId) {
