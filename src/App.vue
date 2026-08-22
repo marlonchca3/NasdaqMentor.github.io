@@ -836,6 +836,17 @@ function getNinjaExecutionDate(execution) {
   return normalizeDate(execution.executionTime || execution.createdAt)
 }
 
+function getNinjaExecutionMs(execution, field) {
+  return normalizeDate(execution?.[field])?.getTime() ?? 0
+}
+
+function getNinjaActionOrder(action) {
+  const normalizedAction = normalizeNinjaAction(action)
+  if (normalizedAction === 'buy' || normalizedAction === 'sellshort') return 0
+  if (normalizedAction === 'sell' || normalizedAction === 'buytocover') return 1
+  return 2
+}
+
 function isNinjaEntryAction(action) {
   return action === 'buy' || action === 'sellshort'
 }
@@ -959,9 +970,16 @@ function closeNinjaDraftQuantity(draft, execution, action, executionDate) {
 
 function buildNinjaTradesFromExecutions(executions) {
   const sortedExecutions = [...executions].sort((a, b) => {
-    const ta = getNinjaExecutionDate(a)?.getTime() ?? 0
-    const tb = getNinjaExecutionDate(b)?.getTime() ?? 0
-    return ta - tb
+    const executionTimeDiff = getNinjaExecutionMs(a, 'executionTime') - getNinjaExecutionMs(b, 'executionTime')
+    if (executionTimeDiff) return executionTimeDiff
+
+    const createdAtDiff = getNinjaExecutionMs(a, 'createdAt') - getNinjaExecutionMs(b, 'createdAt')
+    if (createdAtDiff) return createdAtDiff
+
+    const actionDiff = getNinjaActionOrder(a.action) - getNinjaActionOrder(b.action)
+    if (actionDiff) return actionDiff
+
+    return String(a.executionId || a.id || '').localeCompare(String(b.executionId || b.id || ''))
   })
 
   const trades = []
