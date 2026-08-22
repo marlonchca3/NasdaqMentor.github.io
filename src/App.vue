@@ -1233,17 +1233,34 @@ function clearTradeForm() {
   tradeError.value = ''
 }
 
+async function deleteCollectionDocsInBatches(collectionRef) {
+  const snap = await getDocsFromServer(collectionRef)
+  const docs = snap.docs
+  const batchSize = 450
+
+  for (let i = 0; i < docs.length; i += batchSize) {
+    const batch = writeBatch(db)
+    docs.slice(i, i + batchSize).forEach((docSnap) => {
+      batch.delete(docSnap.ref)
+    })
+    await batch.commit()
+  }
+}
+
 async function clearAllTrades() {
   if (!confirm('¿Seguro que deseas borrar todos los trades guardados? Esta accion no se puede deshacer.')) {
     return
   }
 
   if (user.value) {
-    const batch = writeBatch(db)
-    firestoreTradesList.value.forEach((trade) => {
-      batch.delete(doc(db, 'users', user.value.uid, 'trades', trade.id))
-    })
-    await batch.commit()
+    const userId = user.value.uid
+    await deleteCollectionDocsInBatches(collection(db, 'users', userId, 'trades'))
+    await deleteCollectionDocsInBatches(collection(db, 'users', userId, 'ninjaExecutions'))
+    pendingTrades.value = []
+    firestoreTradesList.value = []
+    ninjaExecutionList.value = []
+    ninjaTradesList.value = []
+    syncCombinedTrades()
   } else {
     tradesList.value = []
     persistEvalTrades()
