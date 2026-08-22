@@ -1248,25 +1248,46 @@ async function deleteCollectionDocsInBatches(collectionRef) {
 }
 
 async function clearAllTrades() {
-  if (!confirm('¿Seguro que deseas borrar todos los trades guardados? Esta accion no se puede deshacer.')) {
+  const confirmed = typeof window !== 'undefined'
+    ? window.confirm('¿Seguro que deseas borrar todos los trades guardados? Esta accion no se puede deshacer.')
+    : true
+
+  if (!confirmed) {
     return
   }
 
-  if (user.value) {
-    const userId = user.value.uid
-    await deleteCollectionDocsInBatches(collection(db, 'users', userId, 'trades'))
-    await deleteCollectionDocsInBatches(collection(db, 'users', userId, 'ninjaExecutions'))
-    pendingTrades.value = []
-    firestoreTradesList.value = []
-    ninjaExecutionList.value = []
-    ninjaTradesList.value = []
-    syncCombinedTrades()
-  } else {
-    tradesList.value = []
-    persistEvalTrades()
-  }
+  tradeError.value = ''
 
-  clearTradeForm()
+  try {
+    if (user.value) {
+      const userId = user.value.uid
+      const results = await Promise.allSettled([
+        deleteCollectionDocsInBatches(collection(db, 'users', userId, 'trades')),
+        deleteCollectionDocsInBatches(collection(db, 'users', userId, 'ninjaExecutions')),
+      ])
+      const failed = results.find((result) => result.status === 'rejected')
+
+      if (failed) {
+        console.error('Error al limpiar trades:', failed.reason)
+        tradeError.value = 'No se pudieron borrar todos los trades. Despliega las reglas de Firestore actualizadas e intenta de nuevo.'
+        return
+      }
+
+      pendingTrades.value = []
+      firestoreTradesList.value = []
+      ninjaExecutionList.value = []
+      ninjaTradesList.value = []
+      syncCombinedTrades()
+    } else {
+      tradesList.value = []
+      persistEvalTrades()
+    }
+
+    clearTradeForm()
+  } catch (err) {
+    console.error('Error al limpiar trades:', err)
+    tradeError.value = 'No se pudieron borrar los trades. Revisa tu conexion o permisos de Firestore.'
+  }
 }
 
 const evalCalculatorNeededGain = computed(() => Math.max(0, evalCalculatorTarget.value - evalCalculatorBalance.value))
