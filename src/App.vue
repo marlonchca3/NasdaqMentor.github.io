@@ -846,23 +846,20 @@ function getNinjaSideFromAction(action) {
   return ''
 }
 
-function createNinjaTradeDraft(execution, action, executionDate) {
+function createNinjaPositionDraft(execution, action, executionDate) {
   return {
     side: getNinjaSideFromAction(action),
     instrument: execution.instrument || '',
     startedAt: executionDate,
-    endedAt: executionDate,
-    entryQuantity: 0,
-    exitQuantity: 0,
+    quantity: 0,
     entryValue: 0,
-    exitValue: 0,
-    commission: 0,
-    executionIds: [],
+    entryCommission: 0,
+    entryExecutionIds: [],
     orderIds: [],
   }
 }
 
-function addNinjaExecutionToDraft(draft, execution, action, executionDate) {
+function addNinjaEntryToDraft(draft, execution) {
   const quantity = Math.abs(Number(execution.quantity || 0))
   const price = Number(execution.price || 0)
   const commission = Number(execution.commission || 0)
@@ -871,54 +868,61 @@ function addNinjaExecutionToDraft(draft, execution, action, executionDate) {
     return
   }
 
-  draft.endedAt = executionDate || draft.endedAt
-  draft.commission += Number.isFinite(commission) ? Math.abs(commission) : 0
-  draft.executionIds.push(String(execution.executionId || execution.id || ''))
+  draft.quantity += quantity
+  draft.entryValue += price * quantity
+  draft.entryCommission += Number.isFinite(commission) ? Math.abs(commission) : 0
+  draft.entryExecutionIds.push(String(execution.executionId || execution.id || ''))
 
   if (execution.orderId) {
     draft.orderIds.push(String(execution.orderId))
   }
-
-  if (draft.side === 'LONG') {
-    if (action === 'buy') {
-      draft.entryQuantity += quantity
-      draft.entryValue += price * quantity
-    } else if (action === 'sell') {
-      draft.exitQuantity += quantity
-      draft.exitValue += price * quantity
-    }
-    return
-  }
-
-  if (draft.side === 'SHORT') {
-    if (action === 'sellshort') {
-      draft.entryQuantity += quantity
-      draft.entryValue += price * quantity
-    } else if (action === 'buytocover') {
-      draft.exitQuantity += quantity
-      draft.exitValue += price * quantity
-    }
-  }
 }
 
-function buildClosedNinjaTrade(draft) {
-  const closedQuantity = Math.min(draft.entryQuantity, draft.exitQuantity)
+function isNinjaExitForDraft(draft, action) {
+  if (draft.side === 'LONG') return action === 'sell'
+  if (draft.side === 'SHORT') return action === 'buytocover'
+  return false
+}
+
+function closeNinjaDraftQuantity(draft, execution, action, executionDate) {
+  if (!isNinjaExitForDraft(draft, action)) {
+    return null
+  }
+
+  const exitQuantity = Math.abs(Number(execution.quantity || 0))
+  const exitPrice = Number(execution.price || 0)
+  const exitCommission = Number(execution.commission || 0)
+  const closedQuantity = Math.min(draft.quantity, exitQuantity)
+
   if (!closedQuantity) {
     return null
   }
 
-  const entryPrice = draft.entryValue / draft.entryQuantity
-  const exitPrice = draft.exitValue / draft.exitQuantity
+  const entryPrice = draft.entryValue / draft.quantity
+  const allocatedEntryValue = entryPrice * closedQuantity
+  const allocatedEntryCommission = draft.entryCommission * (closedQuantity / draft.quantity)
+  const commission = allocatedEntryCommission + (Number.isFinite(exitCommission) ? Math.abs(exitCommission) : 0)
   const pointValue = getInstrumentPointValue(draft.instrument)
   const grossPnl = draft.side === 'LONG'
     ? (exitPrice - entryPrice) * closedQuantity * pointValue
     : (entryPrice - exitPrice) * closedQuantity * pointValue
-  const pnl = grossPnl - draft.commission
+  const pnl = grossPnl - commission
   const rBase = Number.isFinite(evalOneR.value) && evalOneR.value > 0 ? evalOneR.value : 1
   const startedAt = draft.startedAt || draft.endedAt || new Date()
-  const endedAt = draft.endedAt || startedAt
+  const endedAt = executionDate || startedAt
   const durationMs = Math.max(0, endedAt.getTime() - startedAt.getTime())
-  const executionKey = draft.executionIds.filter(Boolean).join('_') || `${draft.instrument}_${endedAt.getTime()}`
+  const exitExecutionId = String(execution.executionId || execution.id || '')
+  const executionKey = exitExecutionId || `${draft.instrument}_${endedAt.getTime()}_${closedQuantity}`
+
+  draft.quantity -= closedQuantity
+  draft.entryValue -= allocatedEntryValue
+  draft.entryCommission -= allocatedEntryCommission
+
+  if (draft.quantity <= 0.0000001) {
+    draft.quantity = 0
+    draft.entryValue = 0
+    draft.entryCommission = 0
+  }
 
   return {
     id: `ninja-${executionKey}`,
@@ -940,11 +944,11 @@ function buildClosedNinjaTrade(draft) {
     entryPrice,
     exitPrice,
     pnl,
-    commission: draft.commission,
+    commission,
     durationMs,
     result: pnl >= 0 ? 'WIN' : 'LOSS',
-    executionIds: draft.executionIds.filter(Boolean),
-    orderIds: [...new Set(draft.orderIds.filter(Boolean))],
+    executionIds: [...draft.entryExecutionIds.filter(Boolean), exitExecutionId].filter(Boolean),
+    orderIds: [...new Set([...draft.orderIds, execution.orderId].filter(Boolean))],
   }
 }
 
@@ -965,7 +969,7 @@ function buildNinjaTradesFromExecutions(executions) {
     let draft = draftsByInstrument.get(draftKey) || null
 
     if (!draft && isNinjaEntryAction(action)) {
-      draft = createNinjaTradeDraft(execution, action, executionDate)
+      draft = createNinjaPositionDraft(execution, action, executionDate)
       draftsByInstrument.set(draftKey, draft)
     }
 
@@ -973,13 +977,17 @@ function buildNinjaTradesFromExecutions(executions) {
       return
     }
 
-    addNinjaExecutionToDraft(draft, execution, action, executionDate)
+    if (isNinjaEntryAction(action) && draft.side === getNinjaSideFromAction(action)) {
+      addNinjaEntryToDraft(draft, execution)
+      return
+    }
 
-    if (Number(execution.position || 0) === 0 && draft.exitQuantity > 0) {
-      const closedTrade = buildClosedNinjaTrade(draft)
-      if (closedTrade) {
-        trades.push(closedTrade)
-      }
+    const closedTrade = closeNinjaDraftQuantity(draft, execution, action, executionDate)
+    if (closedTrade) {
+      trades.push(closedTrade)
+    }
+
+    if (draft.quantity <= 0 || Number(execution.position || 0) === 0) {
       draftsByInstrument.delete(draftKey)
     }
   })
