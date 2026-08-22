@@ -846,6 +846,11 @@ function getNinjaSideFromAction(action) {
   return ''
 }
 
+function isNinjaDraftSideMismatch(draft, action) {
+  const side = getNinjaSideFromAction(action)
+  return Boolean(draft && side && draft.side && draft.side !== side)
+}
+
 function createNinjaPositionDraft(execution, action, executionDate) {
   return {
     side: getNinjaSideFromAction(action),
@@ -969,6 +974,11 @@ function buildNinjaTradesFromExecutions(executions) {
     let draft = draftsByInstrument.get(draftKey) || null
 
     if (!draft && isNinjaEntryAction(action)) {
+      draft = createNinjaPositionDraft(execution, action, executionDate)
+      draftsByInstrument.set(draftKey, draft)
+    }
+
+    if (draft && isNinjaDraftSideMismatch(draft, action)) {
       draft = createNinjaPositionDraft(execution, action, executionDate)
       draftsByInstrument.set(draftKey, draft)
     }
