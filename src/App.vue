@@ -4,7 +4,6 @@ import { gsap } from 'gsap'
 import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
 import ProspectTest from './ProspectTest.vue'
-import BigFiveTest from './BigFiveTest.vue'
 import Dashboard from './Dashboard.vue'
 import {
   addDoc,
@@ -1351,6 +1350,37 @@ const evalCalculatorRrLabel = computed(() => {
   if (!Number.isFinite(rr)) return '—'
   return `${rr.toFixed(2)}:1`
 })
+
+// ── Calculadora Micro Nasdaq (MNQ) ───────────────────────────────
+const mnqTickSize = 0.25
+const mnqPointValue = 2
+const mnqTickValue = mnqTickSize * mnqPointValue
+const mnqTicks = ref(10)
+const mnqDollarsInput = ref('')
+
+const mnqSafeTicks = computed(() => parseCalcNumber(mnqTicks.value))
+const mnqDollarsValue = computed(() => parseCalcNumber(mnqDollarsInput.value))
+const mnqContracts = computed(() => {
+  const tickRisk = Math.abs(mnqSafeTicks.value) * mnqTickValue
+  if (!tickRisk) {
+    return 0
+  }
+
+  return mnqDollarsValue.value / tickRisk
+})
+const mnqPoints = computed(() => mnqSafeTicks.value * mnqTickSize)
+const mnqDollarsPerPoint = computed(() => mnqContracts.value * mnqPointValue)
+const mnqDollarsPerTick = computed(() => mnqContracts.value * mnqTickValue)
+
+function formatMnqNumber(value, decimals = 2) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return '0.00'
+  }
+
+  return parsed.toFixed(decimals)
+}
+
 const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
 const evalTotalUSD = computed(() =>
   tradesList.value.reduce(
@@ -1499,7 +1529,6 @@ const emotionalChecklistOptions = [
 const emotionalChecklist = ref({})
 const emotionalLowScoreLockActive = ref(false)
 const tradeCompliance = ref(null)   // 'segui' | 'parcial' | 'fallo' | null
-const showBigFiveTest = ref(false)
 const weeklyDisciplineBarRef = ref(null)
 const operationLockUntil = ref(0)
 const operationLockStorageKey = 'nasdaq-mentor-operation-lock-until'
@@ -1669,34 +1698,6 @@ function selectTradeCompliance(value) {
   } else if (tradeCompliance.value === 'fallo') {
     speak('Alerta de disciplina. Detén la operativa y revisa tus reglas.')
     applyOperationLock(20)
-  }
-}
-
-function openBigFiveTest() {
-  showBigFiveTest.value = true
-}
-
-function closeBigFiveTest() {
-  showBigFiveTest.value = false
-}
-
-async function saveBigFiveResults(testData) {
-  if (user.value) {
-    try {
-      await addDoc(collection(db, 'users', user.value.uid, 'bigfive_tests'), {
-        results: testData.results,
-        timestamp: testData.timestamp,
-        createdAt: serverTimestamp(),
-      })
-      speak('Resultados del test guardados correctamente.')
-    } catch (err) {
-      console.error('Error al guardar resultados del test:', err)
-    }
-  } else {
-    // Guardar en localStorage para usuarios no autenticados
-    const testResults = JSON.parse(localStorage.getItem('bigfive_tests') || '[]')
-    testResults.push(testData)
-    localStorage.setItem('bigfive_tests', JSON.stringify(testResults))
   }
 }
 
@@ -3555,6 +3556,12 @@ watch(activeSection, (section) => {
           </button>
         </li>
         <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'mnq-calculator' }" @click="openSection('mnq-calculator')">
+            <span class="sidebar-icon">🧮</span>
+            <span class="sidebar-label">Calculadora MNQ</span>
+          </button>
+        </li>
+        <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openSection('evaluacion')">
             <span class="sidebar-icon">📊</span>
             <span class="sidebar-label">Diario de trading</span>
@@ -3570,18 +3577,6 @@ watch(activeSection, (section) => {
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'sincronizador' }" @click="openSection('sincronizador')">
             <span class="sidebar-icon">🔄</span>
             <span class="sidebar-label">Timer UTC</span>
-          </button>
-        </li>
-        <li>
-          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'noticias' }" @click="openSection('noticias')">
-            <span class="sidebar-icon">🔔</span>
-            <span class="sidebar-label">Alertas Noticias</span>
-          </button>
-        </li>
-        <li>
-          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'mercado' }" @click="openSection('mercado')">
-            <span class="sidebar-icon">📰</span>
-            <span class="sidebar-label">Noticias</span>
           </button>
         </li>
         <li>
@@ -3656,12 +3651,6 @@ watch(activeSection, (section) => {
             <span class="sidebar-icon">📚</span>
             <span class="sidebar-label">Libros</span>
           </a>
-        </li>
-        <li>
-          <button class="sidebar-item" @click="openBigFiveTest">
-            <span class="sidebar-icon">🧠</span>
-            <span class="sidebar-label">Test Emocional</span>
-          </button>
         </li>
       </ul>
     </nav>
@@ -3817,6 +3806,87 @@ watch(activeSection, (section) => {
           </div>
         </div>
         <Dashboard :trades="monthTrades" :one-r="evalOneR" />
+      </section>
+
+      <section v-show="activeSection === 'mnq-calculator'" id="mnq-calculator" class="mnq-calculator-panel">
+        <div class="hero-row">
+          <div>
+            <p class="eyebrow">Micro Nasdaq</p>
+            <h1>Calculadora MNQ</h1>
+            <p class="subcopy">
+              Convierte contratos, ticks, puntos y dolares con el valor real del Micro Nasdaq.
+            </p>
+          </div>
+        </div>
+
+        <div class="mnq-rate-strip">
+          <div>
+            <span>Tamaño tick</span>
+            <strong>{{ mnqTickSize }} puntos</strong>
+          </div>
+          <div>
+            <span>Valor tick</span>
+            <strong>${{ formatMnqNumber(mnqTickValue) }}</strong>
+          </div>
+          <div>
+            <span>Valor punto</span>
+            <strong>${{ formatMnqNumber(mnqPointValue) }}</strong>
+          </div>
+        </div>
+
+        <div class="mnq-calculator-card">
+          <div class="mnq-input-grid">
+            <label class="calc-field">
+              <span>Ticks</span>
+              <input v-model.number="mnqTicks" class="eval-control" type="number" step="1" inputmode="decimal" />
+            </label>
+            <label class="calc-field">
+              <span>Dolares</span>
+              <input
+                v-model="mnqDollarsInput"
+                class="eval-control"
+                type="text"
+                inputmode="decimal"
+                placeholder="Ejemplo: 25"
+              />
+            </label>
+          </div>
+
+          <div class="calc-results mnq-results">
+            <div class="calc-result-card">
+              <span>Contratos</span>
+              <strong>{{ formatMnqNumber(mnqContracts, 2) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Total ticks</span>
+              <strong>{{ formatMnqNumber(mnqSafeTicks, 0) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Total puntos</span>
+              <strong>{{ formatMnqNumber(mnqPoints) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Total dolares</span>
+              <strong>${{ formatMnqNumber(mnqDollarsValue) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>USD por tick</span>
+              <strong>${{ formatMnqNumber(mnqDollarsPerTick) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>USD por punto</span>
+              <strong>${{ formatMnqNumber(mnqDollarsPerPoint) }}</strong>
+            </div>
+            <div class="calc-result-card">
+              <span>Formula</span>
+              <strong>${{ formatMnqNumber(mnqDollarsValue) }} / ({{ formatMnqNumber(mnqSafeTicks, 0) }} x ${{ formatMnqNumber(mnqTickValue) }})</strong>
+            </div>
+          </div>
+
+          <p class="calc-footnote">
+            MNQ: 1 punto vale $2 por contrato. 1 tick equivale a 0.25 puntos y vale $0.50 por contrato.
+          </p>
+        </div>
       </section>
 
       <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">
@@ -4525,18 +4595,6 @@ watch(activeSection, (section) => {
         </div>
 
         <button class="intro-cta" @click="closeIntro">Comenzar a usar la app →</button>
-      </div>
-    </div>
-  </Transition>
-
-  <!-- Big Five Test Modal -->
-  <Transition name="fade">
-    <div v-if="showBigFiveTest" class="modal-overlay" @click.self="closeBigFiveTest">
-      <div class="modal-content big-five-modal">
-        <BigFiveTest 
-          @close="closeBigFiveTest"
-          @save="saveBigFiveResults"
-        />
       </div>
     </div>
   </Transition>

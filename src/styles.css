@@ -178,6 +178,60 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.mnq-calculator-panel {
+  display: block;
+}
+
+.mnq-rate-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mnq-rate-strip div {
+  min-height: 82px;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  background: rgba(6, 15, 36, 0.78);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.mnq-rate-strip span {
+  color: rgba(165, 193, 236, 0.78);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mnq-rate-strip strong {
+  color: #edf4ff;
+  font-size: 1.35rem;
+}
+
+.mnq-calculator-card {
+  padding: 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(8, 15, 30, 0.95));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mnq-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.mnq-results {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .calc-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -232,7 +286,10 @@
 
 @media (max-width: 768px) {
   .calc-grid,
-  .calc-results {
+  .calc-results,
+  .mnq-rate-strip,
+  .mnq-input-grid,
+  .mnq-results {
     grid-template-columns: 1fr;
   }
 }
@@ -3940,6 +3997,9 @@ h1 {
 :root[data-theme='light'] .noticias-form,
 :root[data-theme='light'] .noticias-item,
 :root[data-theme='light'] .market-news-card,
+:root[data-theme='light'] .mnq-calculator-card,
+:root[data-theme='light'] .mnq-rate-strip div,
+:root[data-theme='light'] .calc-result-card,
 :root[data-theme='light'] .sync-panel,
 :root[data-theme='light'] .pomodoro-panel,
 :root[data-theme='light'] .eval-panel,
@@ -3996,6 +4056,8 @@ h1 {
 :root[data-theme='light'] .noticias-title,
 :root[data-theme='light'] .intro-title,
 :root[data-theme='light'] .intro-feature strong,
+:root[data-theme='light'] .mnq-rate-strip strong,
+:root[data-theme='light'] .calc-result-card strong,
 :root[data-theme='light'] .eval-stat-card strong,
 :root[data-theme='light'] .app-card h1 {
   color: #2e1306;
@@ -4027,6 +4089,9 @@ h1 {
 :root[data-theme='light'] .noticias-info,
 :root[data-theme='light'] .sync-eyebrow,
 :root[data-theme='light'] .sync-utc-badge,
+:root[data-theme='light'] .mnq-rate-strip span,
+:root[data-theme='light'] .calc-result-card span,
+:root[data-theme='light'] .calc-footnote,
 :root[data-theme='light'] .calendar-grid-head span,
 :root[data-theme='light'] .eval-table th,
 :root[data-theme='light'] .eval-table .empty-row {
