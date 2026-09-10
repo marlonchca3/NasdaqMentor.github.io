@@ -2845,7 +2845,12 @@ h1 {
   }
 
   .eval-journal-top {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  .eval-control {
+    width: 100%;
+    min-width: 0;
   }
 
   .eval-journal-actions {
