@@ -723,6 +723,7 @@ const tradeError = ref('')
 const tradeDate = ref(formatDateForInput(new Date()))
 const tradeSession = ref('Sesion')
 const tradeNote = ref('')
+const tradeEntryTactic = ref('')
 const tradeExitTactic = ref('')
 const editingTradeId = ref(null)
 const editingTradeDraft = ref(null)
@@ -734,6 +735,14 @@ let unsubscribeEvalCharts = null
 let evalSaveTimer = null
 
 const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
+const entryTacticOptions = [
+  'Sistema 1 turtle',
+  'Velas',
+  'Mas7er',
+  'Paul con fibo',
+  'Apertura',
+  'Dejar correr por la noche',
+]
 const exitTacticOptions = [
   'Objetivo alcanzado',
   'Stop alcanzado',
@@ -1146,14 +1155,16 @@ const calendarDayMap = computed(() => {
       session: trade.session || 'Sesion',
       usd: tradeUsd,
       note: trade.note || '',
+      entryTactic: trade.entryTactic || '',
       exitTactic: trade.exitTactic || '',
     })
     // Agregar notas al array si existen
-    if ((trade.note && trade.note.trim()) || trade.exitTactic) {
+    if ((trade.note && trade.note.trim()) || trade.entryTactic || trade.exitTactic) {
       slot.notes.push({
         session: trade.session || 'Sesion',
         usd: tradeUsd,
         note: trade.note || '',
+        entryTactic: trade.entryTactic || '',
         exitTactic: trade.exitTactic || '',
       })
     }
@@ -1260,6 +1271,7 @@ function clearTradeForm() {
   tradeDate.value = formatDateForInput(new Date())
   tradeSession.value = 'Sesion'
   tradeNote.value = ''
+  tradeEntryTactic.value = ''
   tradeExitTactic.value = ''
   tradeInput.value = ''
   tradeCompliance.value = null
@@ -2079,6 +2091,7 @@ function subscribeToEval(userId) {
         session: d.data().session ?? 'Sesion',
         rules: d.data().rules ?? 1,
         note: d.data().note ?? '',
+        entryTactic: d.data().entryTactic ?? '',
         exitTactic: d.data().exitTactic ?? '',
         tradeDate: normalizeFirestoreDate(d.data().tradeDate),
         createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
@@ -2198,6 +2211,7 @@ function openNotesModal(notes) {
         session: 'Sesion',
         usd: 0,
         note,
+        entryTactic: '',
         exitTactic: '',
       }
     }
@@ -2206,6 +2220,7 @@ function openNotesModal(notes) {
       session: note.session || 'Sesion',
       usd: Number.isFinite(note.usd) ? note.usd : 0,
       note: note.note || '',
+      entryTactic: note.entryTactic || '',
       exitTactic: note.exitTactic || '',
     }
   })
@@ -2315,6 +2330,7 @@ async function addTrade() {
     r: rVal,
     session: String(tradeSession.value || 'Sesion').slice(0, 40),
     note: String(tradeNote.value || '').slice(0, 140),
+    entryTactic: String(tradeEntryTactic.value || '').slice(0, 80),
     exitTactic: String(tradeExitTactic.value || '').slice(0, 80),
     tradeDate: parsedTradeDate,
     rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
@@ -2470,6 +2486,7 @@ function startEditTrade(trade) {
       : (trade.r * (trade.rBase ?? evalOneR.value)),
     session: trade.session || 'Sesion',
     note: trade.note || '',
+    entryTactic: trade.entryTactic || '',
     exitTactic: trade.exitTactic || '',
     tradeDate: formatDateForInput(normalizeDate(trade.tradeDate || trade.createdAt) || new Date()),
   }
@@ -2503,6 +2520,7 @@ async function saveEditedTrade(tradeId) {
     r: usdValue / baseR,
     session: String(editingTradeDraft.value.session || 'Sesion').slice(0, 40),
     note: String(editingTradeDraft.value.note || '').slice(0, 140),
+    entryTactic: String(editingTradeDraft.value.entryTactic || '').slice(0, 80),
     exitTactic: String(editingTradeDraft.value.exitTactic || '').slice(0, 80),
     tradeDate: parsedTradeDate,
     rBase: baseR,
@@ -4068,6 +4086,10 @@ watch(activeSection, (section) => {
             maxlength="140"
             placeholder="Nota"
           />
+          <select v-model="tradeEntryTactic" class="eval-control">
+            <option value="">Táctica de entrada</option>
+            <option v-for="option in entryTacticOptions" :key="option" :value="option">{{ option }}</option>
+          </select>
           <select v-model="tradeExitTactic" class="eval-control">
             <option value="">Táctica de salida</option>
             <option v-for="option in exitTacticOptions" :key="option" :value="option">{{ option }}</option>
@@ -4089,6 +4111,7 @@ watch(activeSection, (section) => {
                 <th>R</th>
                 <th>Sesion</th>
                 <th>Nota</th>
+                <th>Táctica de entrada</th>
                 <th>Táctica de salida</th>
                 <th>Fecha</th>
                 <th>Acciones</th>
@@ -4096,7 +4119,7 @@ watch(activeSection, (section) => {
             </thead>
             <tbody>
               <tr v-if="!tradesList.length">
-                <td colspan="7" class="empty-row">Aun no hay trades registrados</td>
+                <td colspan="8" class="empty-row">Aun no hay trades registrados</td>
               </tr>
               <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
                 <template v-if="editingTradeId === trade.id && editingTradeDraft">
@@ -4115,6 +4138,12 @@ watch(activeSection, (section) => {
                   </td>
                   <td>
                     <textarea v-model="editingTradeDraft.note" class="eval-inline-input eval-inline-note" maxlength="140" placeholder="Nota"></textarea>
+                  </td>
+                  <td>
+                    <select v-model="editingTradeDraft.entryTactic" class="eval-inline-input eval-inline-select">
+                      <option value="">Táctica de entrada</option>
+                      <option v-for="option in entryTacticOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
                   </td>
                   <td>
                     <select v-model="editingTradeDraft.exitTactic" class="eval-inline-input eval-inline-select">
@@ -4157,7 +4186,12 @@ watch(activeSection, (section) => {
                       {{ trade.note || '-' }}
                     </template>
                   </td>
-                  <td>{{ trade.exitTactic || '-' }}</td>
+                  <td>
+                    {{ trade.entryTactic || '-' }}
+                  </td>
+                  <td>
+                    {{ trade.exitTactic || '-' }}
+                  </td>
                   <td>
                     {{ formatDateCell(normalizeDate(trade.tradeDate || trade.createdAt)) }}
                     <span v-if="normalizeDate(trade.createdAt)" style="display:block;font-size:0.8em;opacity:0.6;">{{ formatTimeFromDate(normalizeDate(trade.createdAt)) }}</span>
@@ -4654,6 +4688,9 @@ watch(activeSection, (section) => {
               <div class="note-meta">
                 <span>{{ note.session || 'Sesion' }}</span>
                 <strong :class="note.usd > 0 ? 'pos' : 'neg'">{{ note.usd > 0 ? '+' : '' }}${{ Number(note.usd || 0).toFixed(2) }}</strong>
+              </div>
+              <div v-if="note.entryTactic" class="note-exit-tactic">
+                <span>Táctica de entrada:</span> {{ note.entryTactic }}
               </div>
               <div v-if="note.exitTactic" class="note-exit-tactic">
                 <span>Táctica de salida:</span> {{ note.exitTactic }}
