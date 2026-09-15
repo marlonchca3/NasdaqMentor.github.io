@@ -725,10 +725,95 @@ const tradeSession = ref('Sesion')
 const tradeNote = ref('')
 const tradeEntryTactic = ref('')
 const tradeExitTactic = ref('')
+const tradingAccountCreatedDate = ref(formatDateForInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 120)))
+const tradingAccountExpiryDate = ref(formatDateForInput(new Date(Date.now() + 1000 * 60 * 60 * 24 * 90)))
 const editingTradeId = ref(null)
 const editingTradeDraft = ref(null)
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
+
+function parseDateInput(value) {
+  if (!value || typeof value !== 'string') {
+    return null
+  }
+
+  const [year, month, day] = value.split('-').map(Number)
+  if (![year, month, day].every((part) => Number.isFinite(part))) {
+    return null
+  }
+
+  const parsed = new Date(year, month - 1, day)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function diffInDays(startDate, endDate) {
+  if (!(startDate instanceof Date) || !(endDate instanceof Date) || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return 0
+  }
+
+  const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000))
+}
+
+const tradingAccountTotalDays = computed(() => {
+  const created = parseDateInput(tradingAccountCreatedDate.value)
+  const expiry = parseDateInput(tradingAccountExpiryDate.value)
+  if (!created || !expiry) {
+    return 0
+  }
+
+  const total = diffInDays(created, expiry)
+  return total > 0 ? total : 1
+})
+
+const tradingAccountRemainingDays = computed(() => {
+  const created = parseDateInput(tradingAccountCreatedDate.value)
+  const expiry = parseDateInput(tradingAccountExpiryDate.value)
+  const today = new Date()
+  const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+  if (!created || !expiry) {
+    return 0
+  }
+
+  if (expiry <= todayMidnight) {
+    return 0
+  }
+
+  const total = tradingAccountTotalDays.value
+  const elapsed = diffInDays(created, todayMidnight)
+  return Math.max(0, total - elapsed)
+})
+
+const tradingAccountProgress = computed(() => {
+  const created = parseDateInput(tradingAccountCreatedDate.value)
+  const expiry = parseDateInput(tradingAccountExpiryDate.value)
+  if (!created || !expiry) {
+    return 0
+  }
+
+  const total = tradingAccountTotalDays.value
+  const remaining = tradingAccountRemainingDays.value
+  if (total <= 0) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, (remaining / total) * 100))
+})
+
+const tradingAccountExpirationText = computed(() => {
+  const remaining = tradingAccountRemainingDays.value
+  if (remaining <= 0) {
+    return 'Cuenta vencida'
+  }
+
+  if (remaining === 1) {
+    return '1 día para vencer'
+  }
+
+  return `${remaining} días para vencer`
+})
 let unsubscribeEvalTrades = null
 let unsubscribeNinjaExecutions = null
 let unsubscribeEvalCharts = null
@@ -3908,6 +3993,48 @@ watch(activeSection, (section) => {
       </section>
 
       <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">
+        <div class="account-lifecycle-card">
+          <div class="account-lifecycle-header">
+            <div>
+              <p class="filter-eyebrow">Cuenta de trading</p>
+              <h2 class="filter-title">Vigencia de la cuenta</h2>
+            </div>
+            <div class="account-expiry-badge" :class="{ 'account-expiry-badge--critical': tradingAccountRemainingDays <= 15 }">
+              {{ tradingAccountExpirationText }}
+            </div>
+          </div>
+
+          <div class="account-lifecycle-grid">
+            <label class="account-date-field">
+              <span>Fecha de creación</span>
+              <input v-model="tradingAccountCreatedDate" class="eval-control" type="date" />
+            </label>
+            <label class="account-date-field">
+              <span>Fecha de vencimiento</span>
+              <input v-model="tradingAccountExpiryDate" class="eval-control" type="date" />
+            </label>
+          </div>
+
+          <div class="account-expiration-visual">
+            <div class="account-expiration-meta">
+              <span>Tiempo restante</span>
+              <strong>{{ tradingAccountRemainingDays }} días</strong>
+            </div>
+
+            <div class="account-progress-3d">
+              <div class="account-progress-3d__track">
+                <div class="account-progress-3d__fill" :style="{ width: `${tradingAccountProgress}%` }">
+                  <div class="account-progress-3d__shine"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="account-expiration-footer">
+              <small>Creada: {{ formatDateCell(parseDateInput(tradingAccountCreatedDate)) || '--' }}</small>
+              <small>Vence: {{ formatDateCell(parseDateInput(tradingAccountExpiryDate)) || '--' }}</small>
+            </div>
+          </div>
+        </div>
 
         <!-- ── Checklist emocional ── -->
         <div id="checklist-emocional" class="filter-section">

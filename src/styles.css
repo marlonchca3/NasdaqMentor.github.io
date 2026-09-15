@@ -289,8 +289,15 @@
   .calc-results,
   .mnq-rate-strip,
   .mnq-input-grid,
-  .mnq-results {
+  .mnq-results,
+  .account-lifecycle-grid {
     grid-template-columns: 1fr;
+  }
+
+  .account-expiration-meta,
+  .account-expiration-footer {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
@@ -1746,6 +1753,146 @@ h1 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.account-lifecycle-card {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  background: linear-gradient(135deg, rgba(14, 23, 43, 0.96), rgba(7, 17, 34, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 30px rgba(2, 6, 23, 0.35);
+}
+
+.account-lifecycle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.account-expiry-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  background: rgba(59, 130, 246, 0.12);
+  color: #dbeafe;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.account-expiry-badge--critical {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+}
+
+.account-lifecycle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.account-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.account-date-field span {
+  color: #a8c0e9;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.account-expiration-visual {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.account-expiration-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: #cfe1ff;
+}
+
+.account-expiration-meta span {
+  font-size: 0.82rem;
+  color: #9bb8df;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-expiration-meta strong {
+  font-size: clamp(1.1rem, 2vw, 1.6rem);
+  color: #eef6ff;
+}
+
+.account-progress-3d {
+  position: relative;
+  padding: 0.25rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(17, 24, 39, 0.9));
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -8px 18px rgba(0, 0, 0, 0.28), 0 10px 24px rgba(15, 23, 42, 0.35);
+}
+
+.account-progress-3d__track {
+  position: relative;
+  height: 26px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #07101f 0%, #0a162d 100%);
+  box-shadow: inset 0 4px 10px rgba(0, 0, 0, 0.8), inset 0 -2px 8px rgba(96, 165, 250, 0.12);
+}
+
+.account-progress-3d__fill {
+  position: relative;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1d4ed8 0%, #38bdf8 30%, #22d3ee 55%, #22c55e 100%);
+  box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.35), inset 0 -4px 8px rgba(8, 47, 73, 0.38), 0 6px 18px rgba(34, 197, 94, 0.22);
+  transition: width 0.5s ease;
+}
+
+.account-progress-3d__fill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.62) 18%, transparent 42%);
+  transform: skewX(-22deg);
+  opacity: 0.9;
+}
+
+.account-progress-3d__shine {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), transparent);
+  border-radius: 14px 14px 0 0;
+}
+
+.account-expiration-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  color: #c8d8ee;
+  font-size: 0.8rem;
 }
 
 .eval-meta-field {
