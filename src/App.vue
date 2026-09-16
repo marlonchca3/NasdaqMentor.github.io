@@ -10,6 +10,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocsFromServer,
   limit,
   onSnapshot,
@@ -725,12 +726,22 @@ const tradeSession = ref('Sesion')
 const tradeNote = ref('')
 const tradeEntryTactic = ref('')
 const tradeExitTactic = ref('')
-const tradingAccountCreatedDate = ref(formatDateForInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 120)))
-const tradingAccountExpiryDate = ref(formatDateForInput(new Date(Date.now() + 1000 * 60 * 60 * 24 * 90)))
+const defaultTradingAccountCreatedDate = formatDateForInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 120))
+const defaultTradingAccountExpiryDate = formatDateForInput(new Date(Date.now() + 1000 * 60 * 60 * 24 * 90))
+const tradingAccountCreatedDate = ref(defaultTradingAccountCreatedDate)
+const tradingAccountExpiryDate = ref(defaultTradingAccountExpiryDate)
 const editingTradeId = ref(null)
 const editingTradeDraft = ref(null)
 const calendarMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 let unsubscribeEval = null
+
+function normalizeDateInputString(value, fallback = '') {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return fallback
+  }
+
+  return parseDateInput(value) ? value : fallback
+}
 
 function parseDateInput(value) {
   if (!value || typeof value !== 'string') {
@@ -818,6 +829,7 @@ let unsubscribeEvalTrades = null
 let unsubscribeNinjaExecutions = null
 let unsubscribeEvalCharts = null
 let evalSaveTimer = null
+let hydratingEvalSettings = false
 
 const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
 const entryTacticOptions = [
@@ -1907,6 +1919,14 @@ function loadEval() {
       } else {
         maxDailyLossUSD.value = 15
       }
+      tradingAccountCreatedDate.value = normalizeDateInputString(
+        parsed.tradingAccountCreatedDate,
+        defaultTradingAccountCreatedDate,
+      )
+      tradingAccountExpiryDate.value = normalizeDateInputString(
+        parsed.tradingAccountExpiryDate,
+        defaultTradingAccountExpiryDate,
+      )
     }
     const rawTrades = localStorage.getItem(guestEvalTradesKey)
     if (rawTrades) {
@@ -1952,10 +1972,77 @@ function loadGuestCharts() {
   }
 }
 
+function getLocalEvalSnapshot() {
+  try {
+    const raw = localStorage.getItem(guestEvalKey)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    const oneR = typeof parsed.oneR === 'number' ? parsed.oneR : 5
+    const objetivo = typeof parsed.objetivo === 'number' ? parsed.objetivo : 58000
+    const maxDailyLossUSDValue = typeof parsed.maxDailyLossUSD === 'number'
+      ? parsed.maxDailyLossUSD
+      : typeof parsed.maxDailyLossR === 'number'
+        ? parsed.maxDailyLossR * oneR
+        : 15
+
+    return {
+      oneR,
+      objetivo,
+      maxDailyLossUSD: maxDailyLossUSDValue,
+      tradingAccountCreatedDate: normalizeDateInputString(
+        parsed.tradingAccountCreatedDate,
+        defaultTradingAccountCreatedDate,
+      ),
+      tradingAccountExpiryDate: normalizeDateInputString(
+        parsed.tradingAccountExpiryDate,
+        defaultTradingAccountExpiryDate,
+      ),
+    }
+  } catch {
+    return null
+  }
+}
+
+async function syncLocalEvalToFirestore(userId) {
+  if (!userId || typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const settingsRef = doc(db, 'users', userId, 'eval', 'settings')
+    const existing = await getDoc(settingsRef)
+    if (existing.exists()) {
+      return
+    }
+
+    const localSnapshot = getLocalEvalSnapshot()
+    if (!localSnapshot) {
+      return
+    }
+
+    await setDoc(settingsRef, localSnapshot, { merge: true })
+  } catch (error) {
+    console.error('syncLocalEvalToFirestore: no se pudo migrar la configuración local', error)
+  }
+}
+
 function persistEval() {
   localStorage.setItem(
     guestEvalKey,
-    JSON.stringify({ oneR: evalOneR.value, objetivo: evalObjetivo.value, maxDailyLossUSD: maxDailyLossUSD.value }),
+    JSON.stringify({
+      oneR: evalOneR.value,
+      objetivo: evalObjetivo.value,
+      maxDailyLossUSD: maxDailyLossUSD.value,
+      tradingAccountCreatedDate: tradingAccountCreatedDate.value,
+      tradingAccountExpiryDate: tradingAccountExpiryDate.value,
+    }),
   )
 }
 
@@ -2152,19 +2239,35 @@ function subscribeToEval(userId) {
   stopEvalSubscription()
 
   unsubscribeEval = onSnapshot(doc(db, 'users', userId, 'eval', 'settings'), (snap) => {
-    if (snap.exists()) {
-      const data = snap.data()
-      evalOneR.value = data.oneR ?? 5
-      evalObjetivo.value = data.objetivo ?? 58000
-      if (typeof data.maxDailyLossUSD === 'number') {
-        maxDailyLossUSD.value = data.maxDailyLossUSD
-      } else if (typeof data.maxDailyLossR === 'number') {
-        maxDailyLossUSD.value = data.maxDailyLossR * evalOneR.value
-      } else {
-        maxDailyLossUSD.value = 15
-      }
+    if (!snap.exists()) {
+      hydratingEvalSettings = false
+      return
     }
+
+    hydratingEvalSettings = true
+    const data = snap.data()
+    evalOneR.value = data.oneR ?? 5
+    evalObjetivo.value = data.objetivo ?? 58000
+    if (typeof data.maxDailyLossUSD === 'number') {
+      maxDailyLossUSD.value = data.maxDailyLossUSD
+    } else if (typeof data.maxDailyLossR === 'number') {
+      maxDailyLossUSD.value = data.maxDailyLossR * evalOneR.value
+    } else {
+      maxDailyLossUSD.value = 15
+    }
+    tradingAccountCreatedDate.value = normalizeDateInputString(
+      data.tradingAccountCreatedDate,
+      defaultTradingAccountCreatedDate,
+    )
+    tradingAccountExpiryDate.value = normalizeDateInputString(
+      data.tradingAccountExpiryDate,
+      defaultTradingAccountExpiryDate,
+    )
+    nextTick(() => {
+      hydratingEvalSettings = false
+    })
   }, (err) => {
+    hydratingEvalSettings = false
     console.error('subscribeToEval: eval settings snapshot error', err)
   })
 
@@ -2330,7 +2433,13 @@ async function saveEvalSettings() {
     if (user.value) {
       await setDoc(
         doc(db, 'users', user.value.uid, 'eval', 'settings'),
-        { oneR: evalOneR.value, objetivo: evalObjetivo.value, maxDailyLossUSD: maxDailyLossUSD.value },
+        {
+          oneR: evalOneR.value,
+          objetivo: evalObjetivo.value,
+          maxDailyLossUSD: maxDailyLossUSD.value,
+          tradingAccountCreatedDate: tradingAccountCreatedDate.value,
+          tradingAccountExpiryDate: tradingAccountExpiryDate.value,
+        },
         { merge: true },
       )
       return
@@ -2356,6 +2465,19 @@ function flushEvalSettingsSave() {
   }
 
   saveEvalSettings()
+}
+
+function saveTradingAccountDatesNow() {
+  tradingAccountCreatedDate.value = normalizeDateInputString(
+    tradingAccountCreatedDate.value,
+    defaultTradingAccountCreatedDate,
+  )
+  tradingAccountExpiryDate.value = normalizeDateInputString(
+    tradingAccountExpiryDate.value,
+    defaultTradingAccountExpiryDate,
+  )
+
+  flushEvalSettingsSave()
 }
 
 function handlePageHide() {
@@ -2917,7 +3039,11 @@ watch(maxDailyLossUSD, (value) => {
   maxDailyLossInput.value = String(clamped)
 })
 
-watch([evalOneR, evalObjetivo, maxDailyLossUSD], () => {
+watch([evalOneR, evalObjetivo, maxDailyLossUSD, tradingAccountCreatedDate, tradingAccountExpiryDate], () => {
+  if (hydratingEvalSettings) {
+    return
+  }
+
   scheduleEvalSettingsSave()
 })
 
@@ -3000,7 +3126,7 @@ onMounted(() => {
   syncUpdateClock()
   syncClockInterval = setInterval(syncUpdateClock, 250)
 
-  onAuthStateChanged(auth, (firebaseUser) => {
+  onAuthStateChanged(auth, async (firebaseUser) => {
     stopTaskSubscription()
     stopEvalSubscription()
     stopTeamCommentsSubscription()
@@ -3011,6 +3137,7 @@ onMounted(() => {
     if (firebaseUser) {
       subscribeToTasks(firebaseUser.uid)
       subscribeToEval(firebaseUser.uid)
+      await syncLocalEvalToFirestore(firebaseUser.uid)
       subscribeTeamComments()
       return
     }
@@ -4007,11 +4134,11 @@ watch(activeSection, (section) => {
           <div class="account-lifecycle-grid">
             <label class="account-date-field">
               <span>Fecha de creación</span>
-              <input v-model="tradingAccountCreatedDate" class="eval-control" type="date" />
+              <input v-model="tradingAccountCreatedDate" class="eval-control" type="date" @change="saveTradingAccountDatesNow" @blur="saveTradingAccountDatesNow" />
             </label>
             <label class="account-date-field">
               <span>Fecha de vencimiento</span>
-              <input v-model="tradingAccountExpiryDate" class="eval-control" type="date" />
+              <input v-model="tradingAccountExpiryDate" class="eval-control" type="date" @change="saveTradingAccountDatesNow" @blur="saveTradingAccountDatesNow" />
             </label>
           </div>
 
