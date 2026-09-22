@@ -839,6 +839,7 @@ const entryTacticOptions = [
   'Paul con fibo',
   'Apertura',
   'Dejar correr por la noche',
+  'Entré por emoción, no debí entrar, trade basura',
 ]
 const exitTacticOptions = [
   'Objetivo alcanzado',
