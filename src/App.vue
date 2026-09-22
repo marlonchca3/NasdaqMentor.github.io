@@ -870,6 +870,41 @@ function formatTimeFromDate(date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function normalizeTimeInput(value, fallback = '00:00') {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  const match = value.match(/^(\d{2}):(\d{2})$/)
+  if (!match) {
+    return fallback
+  }
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return fallback
+  }
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
+function combineDateAndTime(dateValue, timeValue, fallbackDate = new Date()) {
+  const parsedDate = normalizeDate(dateValue) || fallbackDate
+  const normalizedTime = normalizeTimeInput(timeValue, formatTimeFromDate(parsedDate) || '00:00')
+  const [hours, minutes] = normalizedTime.split(':').map(Number)
+
+  return new Date(
+    parsedDate.getFullYear(),
+    parsedDate.getMonth(),
+    parsedDate.getDate(),
+    hours,
+    minutes,
+    0,
+    0,
+  )
+}
+
 function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.round(Number(ms || 0) / 1000))
   const hours = Math.floor(totalSeconds / 3600)
@@ -2686,6 +2721,8 @@ function startEditTrade(trade) {
     return
   }
 
+  const tradeTimestamp = normalizeDate(trade.createdAt || trade.tradeDate) || new Date()
+
   editingTradeId.value = trade.id
   editingTradeDraft.value = {
     usd: Number.isFinite(trade.rBase) && trade.rBase > 0
@@ -2696,6 +2733,7 @@ function startEditTrade(trade) {
     entryTactic: trade.entryTactic || '',
     exitTactic: trade.exitTactic || '',
     tradeDate: formatDateForInput(normalizeDate(trade.tradeDate || trade.createdAt) || new Date()),
+    tradeTime: formatTimeFromDate(tradeTimestamp),
   }
 }
 
@@ -2722,7 +2760,12 @@ async function saveEditedTrade(tradeId) {
     ? currentTrade.rBase
     : evalOneR.value
 
-  const parsedTradeDate = normalizeDate(editingTradeDraft.value.tradeDate || new Date()) || new Date()
+  const currentTimestamp = normalizeDate(currentTrade.createdAt || currentTrade.tradeDate) || new Date()
+  const parsedTradeDate = combineDateAndTime(
+    editingTradeDraft.value.tradeDate || currentTimestamp,
+    editingTradeDraft.value.tradeTime,
+    currentTimestamp,
+  )
   const nextPayload = {
     r: usdValue / baseR,
     session: String(editingTradeDraft.value.session || 'Sesion').slice(0, 40),
@@ -2730,6 +2773,7 @@ async function saveEditedTrade(tradeId) {
     entryTactic: String(editingTradeDraft.value.entryTactic || '').slice(0, 80),
     exitTactic: String(editingTradeDraft.value.exitTactic || '').slice(0, 80),
     tradeDate: parsedTradeDate,
+    createdAt: parsedTradeDate,
     rBase: baseR,
   }
 
@@ -4367,7 +4411,7 @@ watch(activeSection, (section) => {
                 <th>Nota</th>
                 <th>Táctica de entrada</th>
                 <th>Táctica de salida</th>
-                <th>Fecha</th>
+                <th>Fecha / Hora</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -4407,6 +4451,7 @@ watch(activeSection, (section) => {
                   </td>
                   <td>
                     <input v-model="editingTradeDraft.tradeDate" class="eval-inline-input" type="date" />
+                    <input v-model="editingTradeDraft.tradeTime" class="eval-inline-input" type="time" />
                   </td>
                   <td>
                     <div class="eval-inline-actions">

@@ -42,17 +42,21 @@ const winRate = computed(() => {
   return Math.round((winningTrades.value / totalTrades.value) * 100)
 })
 
+function getTradeUsd(trade) {
+  return (Number(trade.r) || 0) * (trade.rBase ?? props.oneR)
+}
+
 const totalGains = computed(() => {
   return props.trades
-    .filter((t) => (t.r * (t.rBase ?? props.oneR)) > 0)
-    .reduce((sum, t) => sum + (t.r * (t.rBase ?? props.oneR)), 0)
+    .filter((t) => getTradeUsd(t) > 0)
+    .reduce((sum, t) => sum + getTradeUsd(t), 0)
 })
 
 const totalLosses = computed(() => {
   return Math.abs(
     props.trades
-      .filter((t) => (t.r * (t.rBase ?? props.oneR)) < 0)
-      .reduce((sum, t) => sum + (t.r * (t.rBase ?? props.oneR)), 0)
+      .filter((t) => getTradeUsd(t) < 0)
+      .reduce((sum, t) => sum + getTradeUsd(t), 0)
   )
 })
 
@@ -82,6 +86,65 @@ const expectancy = computed(() => {
   const loseProbability = totalTrades.value > 0 ? losingTrades.value / totalTrades.value : 0
   return (winProbability * avgWin.value) - (loseProbability * avgLoss.value)
 })
+
+function normalizeTacticName(value) {
+  const label = String(value || '').trim()
+  return label || ''
+}
+
+function buildTacticStats(field) {
+  const stats = new Map()
+
+  props.trades.forEach((trade) => {
+    const tactic = normalizeTacticName(trade[field])
+    if (!tactic) return
+
+    const usd = getTradeUsd(trade)
+    const r = Number(trade.r) || 0
+    const current = stats.get(tactic) || {
+      name: tactic,
+      count: 0,
+      wins: 0,
+      losses: 0,
+      netUsd: 0,
+      netR: 0,
+    }
+
+    current.count += 1
+    current.netUsd += usd
+    current.netR += r
+    if (usd > 0) current.wins += 1
+    if (usd < 0) current.losses += 1
+    stats.set(tactic, current)
+  })
+
+  return [...stats.values()]
+    .map((item) => ({
+      ...item,
+      winRate: item.count ? Math.round((item.wins / item.count) * 100) : 0,
+      avgUsd: item.count ? item.netUsd / item.count : 0,
+      avgR: item.count ? item.netR / item.count : 0,
+    }))
+    .sort((a, b) => {
+      const sampleDiff = Number(b.count >= 2) - Number(a.count >= 2)
+      if (sampleDiff) return sampleDiff
+
+      const avgDiff = b.avgUsd - a.avgUsd
+      if (avgDiff) return avgDiff
+
+      const netDiff = b.netUsd - a.netUsd
+      if (netDiff) return netDiff
+
+      return b.count - a.count
+    })
+}
+
+const entryTacticStats = computed(() => buildTacticStats('entryTactic'))
+const exitTacticStats = computed(() => buildTacticStats('exitTactic'))
+const entryTacticCount = computed(() => entryTacticStats.value.length)
+const exitTacticCount = computed(() => exitTacticStats.value.length)
+const bestEntryTactic = computed(() => entryTacticStats.value[0] || null)
+const bestExitTactic = computed(() => exitTacticStats.value[0] || null)
 
 const sortedTrades = computed(() => {
   return [...props.trades].sort((a, b) => {
@@ -556,6 +619,100 @@ function formatHourLabel(value) {
         <strong style="color: #f87171;">{{ formatUsd(-maxDrawdown) }}</strong>
         <span class="metric-change">{{ ((maxDrawdown / (netPnl > 0 ? netPnl : 1)) * 100).toFixed(1) }}% del P&L</span>
       </div>
+
+      <!-- ENTRY TACTICS -->
+      <div class="metric-card">
+        <span class="metric-label">TÁCTICAS ENTRADA</span>
+        <strong style="color: #38bdf8;">{{ entryTacticCount }}</strong>
+        <span class="metric-change">
+          Mejor: {{ bestEntryTactic ? bestEntryTactic.name : 'Sin datos' }}
+        </span>
+      </div>
+
+      <!-- EXIT TACTICS -->
+      <div class="metric-card">
+        <span class="metric-label">TÁCTICAS SALIDA</span>
+        <strong style="color: #fbbf24;">{{ exitTacticCount }}</strong>
+        <span class="metric-change">
+          Mejor: {{ bestExitTactic ? bestExitTactic.name : 'Sin datos' }}
+        </span>
+      </div>
+    </div>
+
+    <div class="tactics-grid">
+      <section class="tactics-panel">
+        <div class="tactics-panel-header">
+          <h3>Tácticas de entrada</h3>
+          <span>{{ entryTacticCount }} usadas</span>
+        </div>
+        <div v-if="bestEntryTactic" class="best-tactic">
+          <span>Mejor entrada</span>
+          <strong>{{ bestEntryTactic.name }}</strong>
+          <small>{{ formatUsd(bestEntryTactic.avgUsd) }} promedio · {{ bestEntryTactic.winRate }}% win rate</small>
+        </div>
+        <div class="tactics-table-wrap">
+          <table class="tactics-table">
+            <thead>
+              <tr>
+                <th>Táctica</th>
+                <th>Cant.</th>
+                <th>WR</th>
+                <th>Neto</th>
+                <th>Prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!entryTacticStats.length">
+                <td colspan="5">Aún no hay tácticas de entrada registradas</td>
+              </tr>
+              <tr v-for="tactic in entryTacticStats" :key="`entry-${tactic.name}`">
+                <td>{{ tactic.name }}</td>
+                <td>{{ tactic.count }}</td>
+                <td>{{ tactic.winRate }}%</td>
+                <td :class="tactic.netUsd >= 0 ? 'positive-value' : 'negative-value'">{{ formatUsd(tactic.netUsd) }}</td>
+                <td :class="tactic.avgUsd >= 0 ? 'positive-value' : 'negative-value'">{{ formatUsd(tactic.avgUsd) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tactics-panel">
+        <div class="tactics-panel-header">
+          <h3>Tácticas de salida</h3>
+          <span>{{ exitTacticCount }} usadas</span>
+        </div>
+        <div v-if="bestExitTactic" class="best-tactic">
+          <span>Mejor salida</span>
+          <strong>{{ bestExitTactic.name }}</strong>
+          <small>{{ formatUsd(bestExitTactic.avgUsd) }} promedio · {{ bestExitTactic.winRate }}% win rate</small>
+        </div>
+        <div class="tactics-table-wrap">
+          <table class="tactics-table">
+            <thead>
+              <tr>
+                <th>Táctica</th>
+                <th>Cant.</th>
+                <th>WR</th>
+                <th>Neto</th>
+                <th>Prom.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!exitTacticStats.length">
+                <td colspan="5">Aún no hay tácticas de salida registradas</td>
+              </tr>
+              <tr v-for="tactic in exitTacticStats" :key="`exit-${tactic.name}`">
+                <td>{{ tactic.name }}</td>
+                <td>{{ tactic.count }}</td>
+                <td>{{ tactic.winRate }}%</td>
+                <td :class="tactic.netUsd >= 0 ? 'positive-value' : 'negative-value'">{{ formatUsd(tactic.netUsd) }}</td>
+                <td :class="tactic.avgUsd >= 0 ? 'positive-value' : 'negative-value'">{{ formatUsd(tactic.avgUsd) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div class="charts-grid">
@@ -1128,6 +1285,108 @@ function formatHourLabel(value) {
   line-height: 1.2;
 }
 
+.tactics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.tactics-panel {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8));
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.tactics-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tactics-panel-header h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.tactics-panel-header span {
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.best-tactic {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.best-tactic span,
+.best-tactic small {
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.best-tactic strong {
+  color: #e2e8f0;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.tactics-table-wrap {
+  overflow-x: auto;
+}
+
+.tactics-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.tactics-table th,
+.tactics-table td {
+  padding: 0.65rem 0.55rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tactics-table th {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.tactics-table th:not(:first-child),
+.tactics-table td:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.positive-value {
+  color: #4ade80 !important;
+}
+
+.negative-value {
+  color: #f87171 !important;
+}
+
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1280,6 +1539,10 @@ function formatHourLabel(value) {
   }
 
   .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tactics-grid {
     grid-template-columns: 1fr;
   }
 
