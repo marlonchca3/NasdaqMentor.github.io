@@ -835,6 +835,7 @@ const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
 const entryTacticOptions = [
   'Sistema 1 turtle',
   'Velas',
+  'FVG',
   'Mas7er',
   'Paul con fibo',
   'Apertura',
