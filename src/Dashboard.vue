@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import ChartInspector from './ChartInspector.vue'
 
 const props = defineProps({
   trades: {
@@ -24,15 +25,15 @@ function closeChart() {
 
 // Calcular métricas principales
 const netPnl = computed(() => {
-  return props.trades.reduce((sum, t) => sum + (t.r * (t.rBase ?? props.oneR)), 0)
+  return props.trades.reduce((sum, t) => sum + getTradeUsd(t), 0)
 })
 
 const winningTrades = computed(() => {
-  return props.trades.filter((t) => (t.r * (t.rBase ?? props.oneR)) > 0).length
+  return props.trades.filter((t) => getTradeUsd(t) > 0).length
 })
 
 const losingTrades = computed(() => {
-  return props.trades.filter((t) => (t.r * (t.rBase ?? props.oneR)) < 0).length
+  return props.trades.filter((t) => getTradeUsd(t) < 0).length
 })
 
 const totalTrades = computed(() => props.trades.length)
@@ -162,8 +163,8 @@ const maxDrawdown = computed(() => {
   let maxDrawdownValue = 0
   let runningBalance = 0
   
-  props.trades.forEach((trade) => {
-    const tradeUsd = trade.r * (trade.rBase ?? props.oneR)
+  sortedTrades.value.forEach((trade) => {
+    const tradeUsd = getTradeUsd(trade)
     runningBalance += tradeUsd
     if (runningBalance > peak) {
       peak = runningBalance
@@ -183,7 +184,7 @@ const cumulativePnl = computed(() => {
   let running = 0
   
   sortedTrades.value.forEach((trade) => {
-    const tradeUsd = trade.r * (trade.rBase ?? props.oneR)
+    const tradeUsd = getTradeUsd(trade)
     running += tradeUsd
     data.push({
       date: new Date(trade.tradeDate || trade.createdAt),
@@ -217,7 +218,7 @@ const scatterYAxis = computed(() => {
     const value = max - spread * ratio
     return {
       value,
-      y: 170 - ratio * 150,
+      y: 20 + ratio * 150,
     }
   })
 })
@@ -342,14 +343,14 @@ const dailyPnl = computed(() => {
   const byDate = {}
   props.trades.forEach((trade) => {
     const date = new Date(trade.tradeDate || trade.createdAt)
-    const key = date.toISOString().split('T')[0]
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
     if (!byDate[key]) byDate[key] = []
     byDate[key].push(trade)
   })
   
   return Object.entries(byDate).map(([date, trades]) => ({
     date,
-    value: trades.reduce((sum, t) => sum + (t.r * (t.rBase ?? props.oneR)), 0),
+    value: trades.reduce((sum, t) => sum + getTradeUsd(t), 0),
     trades: trades.length,
   })).sort((a, b) => a.date.localeCompare(b.date))
 })
@@ -403,22 +404,21 @@ const pieSlices = computed(() => {
   return slices
 })
 
-const cumulativeYAxis = computed(() => {
+const cumulativeYAxis = computed(() => buildValueAxis(cumulativePnl.value.map((point) => point.value)))
+const cumulativeZeroY = computed(() => valueToChartY(0, cumulativePnl.value.map((point) => point.value)))
+const cumulativePoints = computed(() => {
   const values = cumulativePnl.value.map((point) => point.value)
-  if (!values.length) return []
-
-  const min = Math.min(0, ...values)
-  const max = Math.max(0, ...values)
-  const spread = max - min || 1
-
-  return Array.from({ length: 5 }, (_, index) => {
-    const ratio = index / 4
-    const value = max - spread * ratio
-    return {
-      value,
-      y: 170 - ratio * 150,
-    }
-  })
+  return cumulativePnl.value.map((point, index) => ({
+    ...point,
+    x: cumulativePnl.value.length === 1 ? 210 : 30 + (index / (cumulativePnl.value.length - 1)) * 360,
+    y: valueToChartY(point.value, values),
+  }))
+})
+const cumulativeLine = computed(() => cumulativePoints.value.map((point) => `${point.x},${point.y}`).join(' '))
+const cumulativeArea = computed(() => {
+  const points = cumulativePoints.value
+  if (points.length < 2) return ''
+  return `${points[0].x},${cumulativeZeroY.value} ${cumulativeLine.value} ${points.at(-1).x},${cumulativeZeroY.value}`
 })
 
 const cumulativeXLabels = computed(() => {
@@ -430,24 +430,24 @@ const cumulativeXLabels = computed(() => {
     .filter(({ index }) => index === 0 || index === cumulativePnl.value.length - 1 || index % step === 0)
     .map(({ point, index }) => ({
       label: formatDateLabel(point.date),
-      x: 30 + (index / Math.max(1, cumulativePnl.value.length - 1)) * 360,
+      x: cumulativePoints.value[index].x,
     }))
 })
 
-const dailyYAxis = computed(() => {
+const dailyYAxis = computed(() => buildValueAxis(dailyPnl.value.map((point) => point.value)))
+const dailyZeroY = computed(() => valueToChartY(0, dailyPnl.value.map((point) => point.value)))
+const dailyBars = computed(() => {
   const values = dailyPnl.value.map((point) => point.value)
-  if (!values.length) return []
-
-  const min = Math.min(0, ...values)
-  const max = Math.max(0, ...values)
-  const spread = max - min || 1
-
-  return Array.from({ length: 5 }, (_, index) => {
-    const ratio = index / 4
-    const value = max - spread * ratio
+  const zeroY = dailyZeroY.value
+  const width = Math.min(16, 340 / Math.max(1, values.length))
+  return dailyPnl.value.map((point, index) => {
+    const valueY = valueToChartY(point.value, values)
     return {
-      value,
-      y: 170 - ratio * 150,
+      ...point,
+      x: 40 + ((index + 0.5) / values.length) * 340,
+      y: Math.min(zeroY, valueY),
+      width,
+      height: Math.abs(valueY - zeroY),
     }
   })
 })
@@ -461,7 +461,7 @@ const dailyXLabels = computed(() => {
     .filter(({ index }) => index === 0 || index === dailyPnl.value.length - 1 || index % step === 0)
     .map(({ point, index }) => ({
       label: formatDateLabel(point.date),
-      x: 30 + (index / Math.max(1, dailyPnl.value.length - 1)) * 360,
+      x: dailyBars.value[index].x,
     }))
 })
 
@@ -485,7 +485,7 @@ function buildValueAxis(values) {
     const value = max - range * ratio
     return {
       value,
-      y: 170 - ratio * 150,
+      y: 20 + ratio * 150,
     }
   })
 }
@@ -531,6 +531,35 @@ function valueToChartX(value, values) {
   return 30 + ((value - min) / range) * 360
 }
 
+function tradeInspectionDetail(trade, index) {
+  return `Trade #${index + 1} · ${formatUsd(getTradeUsd(trade))} · ${(Number(trade.r) || 0).toFixed(2)}R · ${trade.session || 'Sesión'}${trade.note ? ` · ${trade.note}` : ''}`
+}
+
+const inspectionSeries = computed(() => {
+  const trades = sortedTrades.value
+  const perTrade = (points, extra = () => '') => points.map((point, index) => ({
+    ...point,
+    label: `${formatDateLabel(point.date)}${extra(point)}`,
+    details: [tradeInspectionDetail(trades[index], index)],
+  }))
+  return {
+    cumulative: perTrade(cumulativePoints.value, (point) => ` · Acumulado: ${formatUsd(point.value)}`),
+    daily: dailyBars.value.map((point) => ({
+      ...point,
+      y: valueToChartY(point.value, dailyPnl.value.map((day) => day.value)),
+      label: `${formatDateLabel(point.date)} · P/L diario: ${formatUsd(point.value)}`,
+      details: trades.flatMap((trade, index) => {
+        const date = new Date(trade.tradeDate || trade.createdAt)
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        return key === point.date ? [tradeInspectionDetail(trade, index)] : []
+      }),
+    })),
+    scatter: perTrade(scatterPoints.value),
+    hour: perTrade(hourPnlPoints.value, (point) => ` · ${formatHourLabel(point.hour)}`),
+    risk: perTrade(riskPnlPoints.value, (point) => ` · Riesgo: ${formatUsd(point.risk)}`),
+  }
+})
+
 // Formatear valores USD
 function formatUsd(value) {
   return new Intl.NumberFormat('es-AR', {
@@ -551,7 +580,7 @@ function formatDateLabel(value) {
   return new Intl.DateTimeFormat('es-ES', {
     month: 'short',
     day: 'numeric',
-  }).format(new Date(value))
+  }).format(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value))
 }
 
 function formatHourLabel(value) {
@@ -739,6 +768,8 @@ function formatHourLabel(value) {
           ×
         </button>
         <h3>P&L Acumulado</h3>
+        <button v-if="expandedChart !== 'cumulative'" type="button" class="chart-expand" @click.stop="openChart('cumulative')">Ampliar gráfico</button>
+        <ChartInspector :points="inspectionSeries.cumulative" label="P/L acumulado">
         <svg class="line-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
@@ -768,33 +799,12 @@ function formatHourLabel(value) {
             </text>
           </g>
 
-          <polyline
-            v-if="cumulativePnl.length"
-            :points="cumulativePnl.map((d, i) => {
-              const x = 30 + (i / Math.max(1, cumulativePnl.length - 1)) * 360
-              const min = Math.min(0, ...cumulativePnl.map(c => c.value))
-              const max = Math.max(0, ...cumulativePnl.map(c => c.value))
-              const range = max - min || 1
-              const y = 170 - ((d.value - min) / range) * 150
-              return [x, y].join(',')
-            }).join(' ')"
-            fill="none"
-            stroke="#4ade80"
-            stroke-width="2"
-          />
-
-          <polygon
-            v-if="cumulativePnl.length"
-            :points="`30,170 ${cumulativePnl.map((d, i) => {
-              const x = 30 + (i / Math.max(1, cumulativePnl.length - 1)) * 360
-              const min = Math.min(0, ...cumulativePnl.map(c => c.value))
-              const max = Math.max(0, ...cumulativePnl.map(c => c.value))
-              const range = max - min || 1
-              const y = 170 - ((d.value - min) / range) * 150
-              return [x, y].join(',')
-            }).join(' ')} 390,170`"
-            fill="rgba(74, 222, 128, 0.1)"
-          />
+          <line v-if="cumulativePoints.length" x1="30" x2="390" :y1="cumulativeZeroY" :y2="cumulativeZeroY" stroke="#94a3b8" stroke-dasharray="4 4" />
+          <polygon v-if="cumulativeArea" :points="cumulativeArea" fill="rgba(74, 222, 128, 0.1)" />
+          <polyline v-if="cumulativePoints.length" :points="cumulativeLine" fill="none" stroke="#4ade80" stroke-width="2" />
+          <circle v-for="(point, i) in cumulativePoints" :key="i" :cx="point.x" :cy="point.y" r="3" fill="#4ade80">
+            <title>{{ formatDateLabel(point.date) }}: {{ formatUsd(point.value) }}</title>
+          </circle>
 
           <g v-if="cumulativeXLabels.length">
             <text
@@ -812,6 +822,7 @@ function formatHourLabel(value) {
 
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
         </svg>
+        </ChartInspector>
       </div>
 
       <!-- P&L Diario -->
@@ -835,6 +846,8 @@ function formatHourLabel(value) {
           ×
         </button>
         <h3>P&L Diario</h3>
+        <button v-if="expandedChart !== 'daily'" type="button" class="chart-expand" @click.stop="openChart('daily')">Ampliar gráfico</button>
+        <ChartInspector :points="inspectionSeries.daily" label="P/L diario">
         <svg class="bar-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
@@ -864,14 +877,15 @@ function formatHourLabel(value) {
             </text>
           </g>
 
-          <g v-if="dailyPnl.length">
+          <line v-if="dailyBars.length" x1="30" x2="390" :y1="dailyZeroY" :y2="dailyZeroY" stroke="#94a3b8" stroke-dasharray="4 4" />
+          <g v-if="dailyBars.length">
             <rect
-              v-for="(day, i) in dailyPnl"
+              v-for="day in dailyBars"
               :key="day.date"
-              :x="30 + (i / Math.max(1, dailyPnl.length - 1)) * 360 - 8"
-              :y="day.value >= 0 ? 170 - (day.value / Math.max(...dailyPnl.map(d => Math.abs(d.value))) || 1) * 150 : 170"
-              :width="16"
-              :height="Math.abs((day.value / Math.max(...dailyPnl.map(d => Math.abs(d.value))) || 1) * 150)"
+              :x="day.x - day.width / 2"
+              :y="day.y"
+              :width="day.width"
+              :height="day.height"
               :fill="day.value >= 0 ? '#4ade80' : '#f87171'"
               :opacity="0.7"
             />
@@ -893,6 +907,7 @@ function formatHourLabel(value) {
 
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
         </svg>
+        </ChartInspector>
       </div>
 
       <!-- Gráfico de Dispersión -->
@@ -916,7 +931,9 @@ function formatHourLabel(value) {
           ×
         </button>
         <h3>Dispersión por Trade (R)</h3>
+        <button v-if="expandedChart !== 'scatter'" type="button" class="chart-expand" @click.stop="openChart('scatter')">Ampliar gráfico</button>
         <div class="chart-summary">Cada punto representa un trade cerrado</div>
+        <ChartInspector :points="inspectionSeries.scatter" label="Dispersión por trade">
         <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
@@ -993,6 +1010,7 @@ function formatHourLabel(value) {
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">R</text>
           <text x="340" y="188" fill="#94a3b8" font-size="10" font-weight="600">Trades</text>
         </svg>
+        </ChartInspector>
       </div>
 
       <!-- Hora de entrada vs P&L -->
@@ -1016,7 +1034,9 @@ function formatHourLabel(value) {
           ×
         </button>
         <h3>Hora de Entrada vs P&L</h3>
+        <button v-if="expandedChart !== 'hour-pnl'" type="button" class="chart-expand" @click.stop="openChart('hour-pnl')">Ampliar gráfico</button>
         <div class="chart-summary">Puntos por hora de creación del trade</div>
+        <ChartInspector :points="inspectionSeries.hour" label="Hora de entrada y P/L">
         <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
@@ -1089,6 +1109,7 @@ function formatHourLabel(value) {
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
           <text x="340" y="188" fill="#94a3b8" font-size="10" font-weight="600">Hora</text>
         </svg>
+        </ChartInspector>
       </div>
 
       <!-- Riesgo vs P&L -->
@@ -1112,7 +1133,9 @@ function formatHourLabel(value) {
           ×
         </button>
         <h3>Riesgo vs P&L</h3>
+        <button v-if="expandedChart !== 'risk-pnl'" type="button" class="chart-expand" @click.stop="openChart('risk-pnl')">Ampliar gráfico</button>
         <div class="chart-summary">Riesgo tomado desde el valor de 1R</div>
+        <ChartInspector :points="inspectionSeries.risk" label="Riesgo y P/L">
         <svg class="scatter-chart" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet">
           <line x1="30" y1="20" x2="30" y2="170" stroke="#444" stroke-width="1" />
           <line x1="30" y1="170" x2="390" y2="170" stroke="#444" stroke-width="1" />
@@ -1185,6 +1208,7 @@ function formatHourLabel(value) {
           <text x="8" y="18" fill="#94a3b8" font-size="10" font-weight="600">USD</text>
           <text x="338" y="188" fill="#94a3b8" font-size="10" font-weight="600">Riesgo</text>
         </svg>
+        </ChartInspector>
       </div>
 
       <!-- Distribución de Resultados -->
@@ -1444,6 +1468,8 @@ function formatHourLabel(value) {
 .chart-card--expanded:focus-visible {
   transform: translate(-50%, -50%);
 }
+
+.chart-expand { align-self: flex-end; border: 1px solid #475569; border-radius: 0.4rem; background: #0f172a; color: #cbd5e1; padding: 0.35rem 0.6rem; cursor: zoom-in; }
 
 .chart-close {
   position: absolute;

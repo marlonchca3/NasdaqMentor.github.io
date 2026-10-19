@@ -4077,11 +4077,11 @@ watch(activeSection, (section) => {
             <p class="eyebrow">Dashboard</p>
             <h1>Análisis de Operaciones</h1>
             <p class="subcopy">
-              Visualiza tus métricas de trading del mes para mejorar tu rendimiento.
+              Visualiza tu historial completo y recorre las operaciones de todos los meses en los gráficos.
             </p>
           </div>
         </div>
-        <Dashboard :trades="monthTrades" :one-r="evalOneR" />
+        <Dashboard :trades="calendarSourceTrades" :one-r="evalOneR" />
       </section>
 
       <section v-show="activeSection === 'mnq-calculator'" id="mnq-calculator" class="mnq-calculator-panel">
