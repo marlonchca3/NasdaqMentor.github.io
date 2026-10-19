@@ -4548,3 +4548,68 @@ h1 {
     margin: 0;
   }
 }
+
+
+/* Biblioteca de tácticas */
+.tactic-library {
+  --tactic-line: rgba(148, 163, 184, 0.16);
+  --tactic-inset: rgba(2, 8, 23, 0.22);
+  margin: 1.5rem 0;
+  padding: clamp(16px, 2.5vw, 28px);
+  border: 1px solid var(--tactic-line);
+  border-radius: 22px;
+  background: var(--panel);
+  color: var(--text-main);
+}
+.tactic-library-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.4rem; }
+.tactic-eyebrow { margin: 0 0 0.4rem; color: var(--accent-cyan); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.tactic-library h3 { margin: 0; font-size: 1.4rem; letter-spacing: -0.03em; }
+.tactic-description { margin: 0.45rem 0 0; color: var(--text-soft); font-size: 0.85rem; line-height: 1.5; }
+.tactic-total { flex-shrink: 0; padding: 0.45rem 0.7rem; border: 1px solid var(--tactic-line); border-radius: 999px; color: var(--text-soft); font-size: 0.73rem; white-space: nowrap; }
+.tactic-create-form { display: grid; grid-template-columns: 145px minmax(0, 1fr) auto; align-items: end; gap: 0.8rem; padding: 1rem; border: 1px solid var(--tactic-line); border-radius: 14px; background: var(--tactic-inset); }
+.tactic-create-form label { display: grid; gap: 0.5rem; min-width: 0; color: var(--text-soft); font-size: 0.75rem; font-weight: 600; }
+.tactic-create-form .eval-control { width: 100%; min-width: 0; box-sizing: border-box; border-radius: 10px; font-size: 0.85rem; }
+.tactic-create-button { display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 48px; border-radius: 10px; white-space: nowrap; }
+.tactic-create-button span { font-size: 1.2rem; font-weight: 400; }
+.tactic-library-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1rem; margin-top: 1.25rem; }
+.tactic-group { --tactic-color: #7db5ff; --tactic-tint: rgba(96, 165, 250, 0.09); min-width: 0; overflow: hidden; border: 1px solid var(--tactic-line); border-radius: 14px; }
+.tactic-group--exit { --tactic-color: #e8bd72; --tactic-tint: rgba(232, 189, 114, 0.08); }
+.tactic-group-header { display: flex; align-items: center; gap: 0.7rem; padding: 1rem; border-bottom: 1px solid var(--tactic-line); background: var(--tactic-tint); }
+.tactic-group-icon { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; color: var(--tactic-color); background: var(--tactic-tint); }
+.tactic-group-icon svg { width: 22px; height: 22px; }
+.tactic-group h4 { margin: 0; font-size: 0.92rem; font-weight: 650; }
+.tactic-group-header p { margin: 0.25rem 0 0; color: var(--text-soft); font-size: 0.7rem; line-height: 1.4; }
+.tactic-count { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 0.3rem; box-sizing: border-box; margin-left: auto; border-radius: 8px; color: var(--tactic-color); background: var(--tactic-tint); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.tactic-list { display: grid; padding: 0.35rem 0.75rem; margin: 0; list-style: none; }
+.tactic-list li { display: flex; align-items: center; gap: 0.65rem; min-height: 54px; padding: 0.4rem 0; }
+.tactic-list li + li { border-top: 1px solid var(--tactic-line); }
+.tactic-row-mark { flex: 0 0 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--tactic-color); opacity: 0.7; }
+.tactic-row-name { flex: 1; min-width: 0; font-size: 0.8rem; line-height: 1.55; overflow-wrap: anywhere; }
+.tactic-delete-button { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; padding: 0; border: 1px solid transparent; border-radius: 9px; color: var(--text-soft); background: transparent; cursor: pointer; transition: color 150ms, background 150ms, border-color 150ms; }
+.tactic-delete-button svg { width: 17px; height: 17px; }
+.tactic-delete-button:hover { color: #f87171; background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.2); }
+.tactic-delete-button:disabled { opacity: 0.4; cursor: wait; }
+.tactic-library :is(button, input, select):focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 3px; }
+.tactic-empty { padding: 2rem 1rem; text-align: center; color: var(--text-soft); }
+.tactic-empty strong { color: var(--text-main); font-size: 0.8rem; font-weight: 500; }
+.tactic-empty p { margin: 0.5rem 0 0; font-size: 0.75rem; line-height: 1.5; }
+.tactic-success { margin: 0.8rem 0 0; color: var(--accent-green); font-size: 0.8rem; line-height: 1.5; }
+.tactic-library-note { margin: 1rem 0 0; color: var(--text-soft); font-size: 0.72rem; line-height: 1.5; }
+.tactic-select-field { display: grid; gap: 0.4rem; min-width: 0; font-size: 0.85rem; }
+.tactic-select-field .eval-control { width: 100%; min-width: 0; box-sizing: border-box; cursor: pointer; }
+select.eval-inline-select { cursor: pointer; }
+:root[data-theme='light'] .tactic-library { --tactic-line: rgba(130, 79, 42, 0.16); --tactic-inset: rgba(130, 79, 42, 0.035); }
+:root[data-theme='light'] .tactic-group { --tactic-color: #2366a6; --tactic-tint: rgba(35, 102, 166, 0.06); }
+:root[data-theme='light'] .tactic-group--exit { --tactic-color: #98621a; --tactic-tint: rgba(152, 98, 26, 0.06); }
+:root[data-theme='light'] .tactic-delete-button:hover { color: #b42336; }
+@media (max-width: 700px) {
+  .tactic-library-header { align-items: flex-start; }
+  .tactic-create-form { grid-template-columns: 1fr; padding: 0.85rem; }
+  .tactic-create-button { width: 100%; }
+  .tactic-library-lists { grid-template-columns: 1fr; }
+  .tactic-group-header { padding: 0.85rem; }
+  .tactic-delete-button { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tactic-delete-button { transition: none; }
+}

@@ -7,6 +7,8 @@ import ProspectTest from './ProspectTest.vue'
 import Dashboard from './Dashboard.vue'
 import {
   addDoc,
+  arrayUnion,
+  arrayRemove,
   collection,
   deleteDoc,
   doc,
@@ -726,6 +728,19 @@ const tradeSession = ref('Sesion')
 const tradeNote = ref('')
 const tradeEntryTactic = ref('')
 const tradeExitTactic = ref('')
+const customEntryTactics = ref([])
+const customExitTactics = ref([])
+const hiddenEntryTactics = ref([])
+const hiddenExitTactics = ref([])
+const newTacticName = ref('')
+const newTacticType = ref('entry')
+const savingTactic = ref(false)
+const tacticError = ref('')
+const tacticMessage = ref('')
+const guestTacticsKey = 'nasdaq-mentor-guest-tactics'
+let unsubscribeTactics = null
+let tacticAccountVersion = 0
+
 const defaultTradingAccountCreatedDate = formatDateForInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 120))
 const defaultTradingAccountExpiryDate = formatDateForInput(new Date(Date.now() + 1000 * 60 * 60 * 24 * 90))
 const tradingAccountCreatedDate = ref(defaultTradingAccountCreatedDate)
@@ -832,7 +847,7 @@ let evalSaveTimer = null
 let hydratingEvalSettings = false
 
 const weekdayLabel = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM']
-const entryTacticOptions = [
+const defaultEntryTacticOptions = [
   'Sistema 1 turtle',
   'Velas',
   'FVG',
@@ -842,7 +857,7 @@ const entryTacticOptions = [
   'Dejar correr por la noche',
   'Entré por emoción, no debí entrar, trade basura',
 ]
-const exitTacticOptions = [
+const defaultExitTacticOptions = [
   'Objetivo alcanzado',
   'Stop alcanzado',
   'Operación a ninguna parte',
@@ -1240,6 +1255,152 @@ const calendarSourceTrades = computed(() => {
     return true
   })
 })
+
+function normalizeTactics(values) {
+  if (!Array.isArray(values)) return []
+  const seen = new Set()
+  return values.flatMap((value) => {
+    if (typeof value !== 'string') return []
+    const name = value.trim().slice(0, 80)
+    const key = name.toLocaleLowerCase('es')
+    if (!name || seen.has(key)) return []
+    seen.add(key)
+    return [name]
+  })
+}
+
+function tacticSuggestions(field, defaults, custom) {
+  const saved = calendarSourceTrades.value.map((trade) => trade[field])
+  const hidden = field === 'entryTactic' ? hiddenEntryTactics.value : hiddenExitTactics.value
+  const excluded = new Set(hidden.map((name) => name.toLocaleLowerCase('es')))
+  return normalizeTactics([...defaults, ...custom, ...saved])
+    .filter((name) => !excluded.has(name.toLocaleLowerCase('es')))
+}
+
+function persistGuestTactics(overrides = {}) {
+  localStorage.setItem(guestTacticsKey, JSON.stringify({
+    entryTactics: customEntryTactics.value,
+    exitTactics: customExitTactics.value,
+    hiddenEntryTactics: hiddenEntryTactics.value,
+    hiddenExitTactics: hiddenExitTactics.value,
+    ...overrides,
+  }))
+}
+
+const entryTacticOptions = computed(() => tacticSuggestions('entryTactic', defaultEntryTacticOptions, customEntryTactics.value))
+const exitTacticOptions = computed(() => tacticSuggestions('exitTactic', defaultExitTacticOptions, customExitTactics.value))
+
+function loadGuestTactics() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(guestTacticsKey) || '{}')
+    customEntryTactics.value = normalizeTactics(saved?.entryTactics)
+    customExitTactics.value = normalizeTactics(saved?.exitTactics)
+    hiddenEntryTactics.value = normalizeTactics(saved?.hiddenEntryTactics)
+    hiddenExitTactics.value = normalizeTactics(saved?.hiddenExitTactics)
+  } catch {
+    customEntryTactics.value = []
+    customExitTactics.value = []
+    hiddenEntryTactics.value = []
+    hiddenExitTactics.value = []
+    tacticError.value = 'No se pudieron cargar tus tácticas de este navegador.'
+  }
+}
+
+async function createCustomTactic() {
+  if (savingTactic.value) return
+  tacticError.value = ''
+  tacticMessage.value = ''
+  const name = newTacticName.value.trim()
+  const type = newTacticType.value
+  if (!name || name.length > 80) {
+    tacticError.value = 'Escribe una táctica de entre 1 y 80 caracteres.'
+    return
+  }
+  if (type !== 'entry' && type !== 'exit') return
+  const options = type === 'entry' ? entryTacticOptions.value : exitTacticOptions.value
+  if (options.some((option) => option.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) {
+    tacticError.value = 'Esa táctica ya está disponible en las sugerencias.'
+    return
+  }
+
+  const userId = user.value?.uid || null
+  const accountVersion = tacticAccountVersion
+  savingTactic.value = true
+  try {
+    const field = type === 'entry' ? 'entryTactics' : 'exitTactics'
+    const hiddenField = type === 'entry' ? 'hiddenEntryTactics' : 'hiddenExitTactics'
+    const hidden = type === 'entry' ? hiddenEntryTactics : hiddenExitTactics
+    const key = name.toLocaleLowerCase('es')
+    if (userId) {
+      await setDoc(doc(db, 'users', userId, 'eval', 'tactics'), {
+        [field]: arrayUnion(name),
+        [hiddenField]: arrayRemove(key),
+      }, { merge: true })
+    } else {
+      persistGuestTactics({
+        [hiddenField]: hidden.value.filter((item) => item.toLocaleLowerCase('es') !== key),
+        entryTactics: type === 'entry' ? [...customEntryTactics.value, name] : customEntryTactics.value,
+        exitTactics: type === 'exit' ? [...customExitTactics.value, name] : customExitTactics.value,
+      })
+    }
+    if (accountVersion !== tacticAccountVersion) return
+    const target = type === 'entry' ? customEntryTactics : customExitTactics
+    target.value = normalizeTactics([...target.value, name])
+    hidden.value = hidden.value.filter((item) => item.toLocaleLowerCase('es') !== key)
+    if (type === 'entry') tradeEntryTactic.value = name
+    else tradeExitTactic.value = name
+    newTacticName.value = ''
+    tacticMessage.value = `Táctica de ${type === 'entry' ? 'entrada' : 'salida'} creada: ${name}.`
+  } catch (error) {
+    if (accountVersion !== tacticAccountVersion) return
+    tacticError.value = 'No se pudo guardar la táctica. Revisa tu conexión y vuelve a intentar.'
+    console.error('Error al crear táctica:', error)
+  } finally {
+    if (accountVersion === tacticAccountVersion) savingTactic.value = false
+  }
+}
+
+async function deleteTactic(type, name) {
+  if (savingTactic.value || !['entry', 'exit'].includes(type)) return
+  const options = type === 'entry' ? entryTacticOptions.value : exitTacticOptions.value
+  if (!options.includes(name)) return
+  const userId = user.value?.uid || null
+  const accountVersion = tacticAccountVersion
+  const field = type === 'entry' ? 'entryTactics' : 'exitTactics'
+  const hiddenField = type === 'entry' ? 'hiddenEntryTactics' : 'hiddenExitTactics'
+  const target = type === 'entry' ? customEntryTactics : customExitTactics
+  const hidden = type === 'entry' ? hiddenEntryTactics : hiddenExitTactics
+  const key = name.toLocaleLowerCase('es')
+  const matches = target.value.filter((item) => item.toLocaleLowerCase('es') === key)
+  tacticError.value = ''
+  tacticMessage.value = ''
+  savingTactic.value = true
+  try {
+    if (userId) {
+      await setDoc(doc(db, 'users', userId, 'eval', 'tactics'), {
+        ...(matches.length ? { [field]: arrayRemove(...matches) } : {}),
+        [hiddenField]: arrayUnion(key),
+      }, { merge: true })
+    } else {
+      persistGuestTactics({
+        [field]: target.value.filter((item) => item.toLocaleLowerCase('es') !== key),
+        [hiddenField]: normalizeTactics([...hidden.value, key]),
+      })
+    }
+    if (accountVersion !== tacticAccountVersion) return
+    target.value = target.value.filter((item) => item.toLocaleLowerCase('es') !== key)
+    hidden.value = normalizeTactics([...hidden.value, key])
+    const selected = type === 'entry' ? tradeEntryTactic : tradeExitTactic
+    if (selected.value.toLocaleLowerCase('es') === key) selected.value = ''
+    tacticMessage.value = `Táctica de ${type === 'entry' ? 'entrada' : 'salida'} eliminada: ${name}.`
+  } catch (error) {
+    if (accountVersion !== tacticAccountVersion) return
+    tacticError.value = 'No se pudo eliminar la táctica. Vuelve a intentar.'
+    console.error('Error al eliminar táctica:', error)
+  } finally {
+    if (accountVersion === tacticAccountVersion) savingTactic.value = false
+  }
+}
 
 const monthTrades = computed(() => {
   const y = calendarMonth.value.getFullYear()
@@ -1943,6 +2104,7 @@ const guestEvalKey = 'nasdaq-mentor-guest-eval'
 const guestEvalTradesKey = 'nasdaq-mentor-guest-trades'
 
 function loadEval() {
+  loadGuestTactics()
   try {
     const raw = localStorage.getItem(guestEvalKey)
     if (raw) {
@@ -2248,6 +2410,21 @@ async function onChartFileSelected(e) {
 }
 
 function stopEvalSubscription() {
+  tacticAccountVersion += 1
+  if (unsubscribeTactics) {
+    unsubscribeTactics()
+    unsubscribeTactics = null
+  }
+  customEntryTactics.value = []
+  customExitTactics.value = []
+  hiddenEntryTactics.value = []
+  hiddenExitTactics.value = []
+  newTacticName.value = ''
+  tradeEntryTactic.value = ''
+  tradeExitTactic.value = ''
+  savingTactic.value = false
+  tacticError.value = ''
+  tacticMessage.value = ''
   if (unsubscribeEval) {
     unsubscribeEval()
     unsubscribeEval = null
@@ -2274,6 +2451,20 @@ function stopEvalSubscription() {
 
 function subscribeToEval(userId) {
   stopEvalSubscription()
+  const accountVersion = tacticAccountVersion
+  // Las sugerencias se actualizan en tiempo real al crear tácticas en otro dispositivo.
+  unsubscribeTactics = onSnapshot(doc(db, 'users', userId, 'eval', 'tactics'), (snap) => {
+    if (accountVersion !== tacticAccountVersion) return
+    const data = snap.exists() ? snap.data() : {}
+    customEntryTactics.value = normalizeTactics(data.entryTactics)
+    customExitTactics.value = normalizeTactics(data.exitTactics)
+    hiddenEntryTactics.value = normalizeTactics(data.hiddenEntryTactics)
+    hiddenExitTactics.value = normalizeTactics(data.hiddenExitTactics)
+  }, (error) => {
+    if (accountVersion !== tacticAccountVersion) return
+    tacticError.value = 'No se pudieron sincronizar tus tácticas. Revisa tu conexión o permisos.'
+    console.error('Error al cargar tácticas:', error)
+  })
 
   unsubscribeEval = onSnapshot(doc(db, 'users', userId, 'eval', 'settings'), (snap) => {
     if (!snap.exists()) {
@@ -2574,8 +2765,8 @@ async function addTrade() {
     r: rVal,
     session: String(tradeSession.value || 'Sesion').slice(0, 40),
     note: String(tradeNote.value || '').slice(0, 140),
-    entryTactic: String(tradeEntryTactic.value || '').slice(0, 80),
-    exitTactic: String(tradeExitTactic.value || '').slice(0, 80),
+    entryTactic: String(tradeEntryTactic.value || '').trim().slice(0, 80),
+    exitTactic: String(tradeExitTactic.value || '').trim().slice(0, 80),
     tradeDate: parsedTradeDate,
     rBase: evalOneR.value, // Guardar el valor de R global al crear el trade
     compliance: tradeCompliance.value,
@@ -2772,8 +2963,8 @@ async function saveEditedTrade(tradeId) {
     r: usdValue / baseR,
     session: String(editingTradeDraft.value.session || 'Sesion').slice(0, 40),
     note: String(editingTradeDraft.value.note || '').slice(0, 140),
-    entryTactic: String(editingTradeDraft.value.entryTactic || '').slice(0, 80),
-    exitTactic: String(editingTradeDraft.value.exitTactic || '').slice(0, 80),
+    entryTactic: String(editingTradeDraft.value.entryTactic || '').trim().slice(0, 80),
+    exitTactic: String(editingTradeDraft.value.exitTactic || '').trim().slice(0, 80),
     tradeDate: parsedTradeDate,
     createdAt: parsedTradeDate,
     rBase: baseR,
@@ -3734,7 +3925,7 @@ watch(sessionPresence, (nextValue) => {
 })
 
 // ── Sidebar ──────────────────────────────────────────────────────
-const sidebarOpen = ref(false)
+const sidebarOpen = ref(true)
 const ejerciciosOpen = ref(false)
 const activeSection = ref('checklist')
 
@@ -4361,6 +4552,72 @@ watch(activeSection, (section) => {
             <div class="objetivo-progress-fill" :style="{ width: dailyLossProgress + '%', background: dailyLossLimitReached ? '#facc15' : '#fb7185' }"></div>
           </div>
         </div>
+        <section class="tactic-library" aria-labelledby="tactic-library-title">
+          <header class="tactic-library-header">
+            <div>
+              <p class="tactic-eyebrow">Tu plan de trading</p>
+              <h3 id="tactic-library-title">Mis tácticas</h3>
+              <p class="tactic-description">Organiza cómo entras y cómo sales del mercado.</p>
+            </div>
+            <span class="tactic-total">{{ entryTacticOptions.length + exitTacticOptions.length }} tácticas</span>
+          </header>
+          <form class="tactic-create-form" @submit.prevent="createCustomTactic">
+            <label class="tactic-type-field">
+              Tipo
+              <select v-model="newTacticType" class="eval-control" :disabled="savingTactic">
+                <option value="entry">Entrada</option>
+                <option value="exit">Salida</option>
+              </select>
+            </label>
+            <label class="tactic-name-field">
+              Nueva táctica
+              <input v-model="newTacticName" class="eval-control" type="text" maxlength="80" required placeholder="Ej.: ruptura y retroceso" :disabled="savingTactic" />
+            </label>
+            <button class="primary-button tactic-create-button" type="submit" :disabled="savingTactic || !newTacticName.trim()">
+              <span aria-hidden="true">+</span>{{ savingTactic ? 'Guardando…' : 'Crear táctica' }}
+            </button>
+          </form>
+          <p v-if="tacticError" class="error-banner" role="alert">{{ tacticError }}</p>
+          <p v-if="tacticMessage" class="tactic-success" role="status">{{ tacticMessage }}</p>
+          <div class="tactic-library-lists">
+            <section class="tactic-group tactic-group--entry" aria-label="Tácticas de entrada">
+              <header class="tactic-group-header">
+                <span class="tactic-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10" /></svg></span>
+                <div><h4>Entrada</h4><p>Señales para abrir una operación.</p></div>
+                <span class="tactic-count">{{ entryTacticOptions.length }}</span>
+              </header>
+              <ul v-if="entryTacticOptions.length" class="tactic-list">
+                <li v-for="tactic in entryTacticOptions" :key="tactic">
+                  <span class="tactic-row-mark" aria-hidden="true"></span>
+                  <span class="tactic-row-name">{{ tactic }}</span>
+                  <button type="button" class="tactic-delete-button" :disabled="savingTactic" :aria-label="`Eliminar táctica de entrada: ${tactic}`" :title="`Eliminar: ${tactic}`" @click="deleteTactic('entry', tactic)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                  </button>
+                </li>
+              </ul>
+              <div v-else class="tactic-empty"><strong>Tu próxima estrategia empieza aquí</strong><p>Crea tu primera táctica de entrada con el formulario.</p></div>
+            </section>
+            <section class="tactic-group tactic-group--exit" aria-label="Tácticas de salida">
+              <header class="tactic-group-header">
+                <span class="tactic-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M7 17h10V7" /></svg></span>
+                <div><h4>Salida</h4><p>Criterios para cerrar una operación.</p></div>
+                <span class="tactic-count">{{ exitTacticOptions.length }}</span>
+              </header>
+              <ul v-if="exitTacticOptions.length" class="tactic-list">
+                <li v-for="tactic in exitTacticOptions" :key="tactic">
+                  <span class="tactic-row-mark" aria-hidden="true"></span>
+                  <span class="tactic-row-name">{{ tactic }}</span>
+                  <button type="button" class="tactic-delete-button" :disabled="savingTactic" :aria-label="`Eliminar táctica de salida: ${tactic}`" :title="`Eliminar: ${tactic}`" @click="deleteTactic('exit', tactic)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" /></svg>
+                  </button>
+                </li>
+              </ul>
+              <div v-else class="tactic-empty"><strong>Tu próxima estrategia empieza aquí</strong><p>Crea tu primera táctica de salida con el formulario.</p></div>
+            </section>
+          </div>
+          <p class="tactic-library-note">Las tácticas eliminadas se conservan en tus operaciones anteriores.</p>
+        </section>
+
         <div id="nuevo-trade-form" class="eval-journal-top">
           <input v-model="tradeDate" class="eval-control" type="date" />
           <select v-model="tradeSession" class="eval-control">
@@ -4386,15 +4643,25 @@ watch(activeSection, (section) => {
             maxlength="140"
             placeholder="Nota"
           />
-          <select v-model="tradeEntryTactic" class="eval-control">
-            <option value="">Táctica de entrada</option>
-            <option v-for="option in entryTacticOptions" :key="option" :value="option">{{ option }}</option>
-          </select>
-          <select v-model="tradeExitTactic" class="eval-control">
-            <option value="">Táctica de salida</option>
-            <option v-for="option in exitTacticOptions" :key="option" :value="option">{{ option }}</option>
-          </select>
+          <label class="tactic-select-field">
+            <span>Táctica de entrada</span>
+            <select v-model="tradeEntryTactic" class="eval-control" aria-label="Táctica de entrada">
+              <option value="">Sin táctica de entrada</option>
+              <option v-if="tradeEntryTactic && !entryTacticOptions.includes(tradeEntryTactic)" :value="tradeEntryTactic">{{ tradeEntryTactic }}</option>
+              <option v-for="option in entryTacticOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+          </label>
+          <label class="tactic-select-field">
+            <span>Táctica de salida</span>
+            <select v-model="tradeExitTactic" class="eval-control" aria-label="Táctica de salida">
+              <option value="">Sin táctica de salida</option>
+              <option v-if="tradeExitTactic && !exitTacticOptions.includes(tradeExitTactic)" :value="tradeExitTactic">{{ tradeExitTactic }}</option>
+              <option v-for="option in exitTacticOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+          </label>
         </div>
+
+        <p class="subcopy">Selecciona tus tácticas en los desplegables. Para añadir una nueva, usa «Mis tácticas».</p>
 
         <div class="eval-journal-actions">
           <button class="primary-button" :disabled="isOperationLocked || savingTrade" @click="addTrade">Guardar trade</button>
@@ -4440,14 +4707,16 @@ watch(activeSection, (section) => {
                     <textarea v-model="editingTradeDraft.note" class="eval-inline-input eval-inline-note" maxlength="140" placeholder="Nota"></textarea>
                   </td>
                   <td>
-                    <select v-model="editingTradeDraft.entryTactic" class="eval-inline-input eval-inline-select">
-                      <option value="">Táctica de entrada</option>
+                    <select v-model="editingTradeDraft.entryTactic" class="eval-inline-input eval-inline-select" aria-label="Táctica de entrada">
+                      <option value="">Sin táctica de entrada</option>
+                      <option v-if="editingTradeDraft.entryTactic && !entryTacticOptions.includes(editingTradeDraft.entryTactic)" :value="editingTradeDraft.entryTactic">{{ editingTradeDraft.entryTactic }}</option>
                       <option v-for="option in entryTacticOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </td>
                   <td>
-                    <select v-model="editingTradeDraft.exitTactic" class="eval-inline-input eval-inline-select">
-                      <option value="">Táctica de salida</option>
+                    <select v-model="editingTradeDraft.exitTactic" class="eval-inline-input eval-inline-select" aria-label="Táctica de salida">
+                      <option value="">Sin táctica de salida</option>
+                      <option v-if="editingTradeDraft.exitTactic && !exitTacticOptions.includes(editingTradeDraft.exitTactic)" :value="editingTradeDraft.exitTactic">{{ editingTradeDraft.exitTactic }}</option>
                       <option v-for="option in exitTacticOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </td>
