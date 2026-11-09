@@ -5,6 +5,9 @@ import { onAuthStateChanged } from 'firebase/auth'
 import PnlChart from './PnlChart.vue'
 import ProspectTest from './ProspectTest.vue'
 import Dashboard from './Dashboard.vue'
+import TradingAccountPanel from './TradingAccountPanel.vue'
+import { useTradingAccounts } from './useTradingAccounts'
+import { tradeMatchesAccount } from './tradingAccounts'
 import {
   addDoc,
   arrayUnion,
@@ -28,6 +31,8 @@ import { auth, db, loginWithGoogle, logout } from './firebase'
 
 const maxTasks = 10
 const user = ref(null)
+const accountState = useTradingAccounts(user)
+const { accounts: tradingAccounts, selectedId: selectedTradingAccountId, selected: selectedTradingAccount, ready: accountsReady } = accountState
 const authReady = ref(false)
 const themeStorageKey = 'nasdaq-mentor-theme'
 const theme = ref('dark')
@@ -1234,6 +1239,7 @@ const calendarSourceTrades = computed(() => {
   const seenIds = new Set()
 
   return mergedTrades.filter((trade) => {
+    if (!tradeMatchesAccount(trade, selectedTradingAccountId.value)) return false
     if (trade.clientId) {
       if (seenClientIds.has(trade.clientId)) {
         return false
@@ -1575,9 +1581,9 @@ function clearTradeForm() {
   tradeError.value = ''
 }
 
-async function deleteCollectionDocsInBatches(collectionRef) {
+async function deleteCollectionDocsInBatches(collectionRef, accountId) {
   const snap = await getDocsFromServer(collectionRef)
-  const docs = snap.docs
+  const docs = snap.docs.filter((snapshot) => tradeMatchesAccount(snapshot.data(), accountId))
   const batchSize = 450
 
   for (let i = 0; i < docs.length; i += batchSize) {
@@ -1590,45 +1596,34 @@ async function deleteCollectionDocsInBatches(collectionRef) {
 }
 
 async function clearAllTrades() {
-  const confirmed = typeof window !== 'undefined'
-    ? window.confirm('¿Seguro que deseas borrar todos los trades guardados? Esta accion no se puede deshacer.')
-    : true
-
-  if (!confirmed) {
+  const accountId = selectedTradingAccountId.value
+  if (!accountsReady.value || savingTrade.value || pendingTrades.value.length) {
+    tradeError.value = 'Espera a que termine la sincronización antes de limpiar la cuenta.'
     return
   }
-
+  if (!accountId) {
+    tradeError.value = 'Selecciona una cuenta para limpiar únicamente sus operaciones.'
+    return
+  }
+  const ownerId = user.value?.uid
+  const accountName = selectedTradingAccount.value?.name || 'Sin cuenta asignada'
+  if (!window.confirm(`¿Borrar los trades de «${accountName}»? Esta acción no se puede deshacer.`)) return
   tradeError.value = ''
-
   try {
-    if (user.value) {
-      const userId = user.value.uid
-      const results = await Promise.allSettled([
-        deleteCollectionDocsInBatches(collection(db, 'users', userId, 'trades')),
-        deleteCollectionDocsInBatches(collection(db, 'users', userId, 'ninjaExecutions')),
-      ])
-      const failed = results.find((result) => result.status === 'rejected')
-
-      if (failed) {
-        console.error('Error al limpiar trades:', failed.reason)
-        tradeError.value = 'No se pudieron borrar todos los trades. Despliega las reglas de Firestore actualizadas e intenta de nuevo.'
-        return
+    if (ownerId) {
+      await deleteCollectionDocsInBatches(collection(db, 'users', ownerId, 'trades'), accountId)
+      if (accountId === 'unassigned') {
+        await deleteCollectionDocsInBatches(collection(db, 'users', ownerId, 'ninjaExecutions'), accountId)
       }
-
-      pendingTrades.value = []
-      firestoreTradesList.value = []
-      ninjaExecutionList.value = []
-      ninjaTradesList.value = []
-      syncCombinedTrades()
+      // Snapshot listeners update only the deleted trades; other accounts remain intact.
     } else {
-      tradesList.value = []
+      tradesList.value = tradesList.value.filter((trade) => !tradeMatchesAccount(trade, accountId))
       persistEvalTrades()
     }
-
-    clearTradeForm()
+    if (ownerId === user.value?.uid && accountId === selectedTradingAccountId.value) clearTradeForm()
   } catch (err) {
-    console.error('Error al limpiar trades:', err)
-    tradeError.value = 'No se pudieron borrar los trades. Revisa tu conexion o permisos de Firestore.'
+    console.error('Error al limpiar la cuenta:', err)
+    if (ownerId === user.value?.uid) tradeError.value = 'No se pudieron borrar todos los trades de la cuenta. Revisa tu conexión e intenta de nuevo.'
   }
 }
 
@@ -1688,9 +1683,9 @@ function formatMnqNumber(value, decimals = 2) {
   return parsed.toFixed(decimals)
 }
 
-const evalTotalR = computed(() => tradesList.value.reduce((sum, t) => sum + t.r, 0))
+const evalTotalR = computed(() => calendarSourceTrades.value.reduce((sum, t) => sum + t.r, 0))
 const evalTotalUSD = computed(() =>
-  tradesList.value.reduce(
+  calendarSourceTrades.value.reduce(
     (sum, trade) => sum + (trade.r * (typeof trade.rBase === 'number' ? trade.rBase : evalOneR.value)),
     0,
   ),
@@ -1757,7 +1752,7 @@ function getTradeUsdAmount(trade) {
 
 const evalTradesToday = computed(() => {
   const nowMs = cooldownNow.value
-  const riskTrades = [...pendingTrades.value, ...tradesList.value]
+  const riskTrades = calendarSourceTrades.value
   const seenClientIds = new Set()
   const uniqueRiskTrades = riskTrades.filter((trade) => {
     if (!trade.clientId) return true
@@ -1786,8 +1781,8 @@ const dailyLossLimitReached = computed(() =>
   maxDailyLossUSD.value > 0 && dailyLossUsedUSD.value >= maxDailyLossUSD.value,
 )
 const evalWinRate = computed(() => {
-  if (!tradesList.value.length) return 0
-  return Math.round((tradesList.value.filter((t) => t.r > 0).length / tradesList.value.length) * 100)
+  if (!calendarSourceTrades.value.length) return 0
+  return Math.round((calendarSourceTrades.value.filter((t) => t.r > 0).length / calendarSourceTrades.value.length) * 100)
 })
 
 // ── Checklist emocional & Disciplina ──────────────────────────────
@@ -2020,7 +2015,7 @@ function getWeekStart() {
 
 const weeklyTrades = computed(() => {
   const weekStart = getWeekStart()
-  return tradesList.value.filter((t) => {
+  return calendarSourceTrades.value.filter((t) => {
     const d = normalizeDate(t.tradeDate || t.createdAt)
     return d && d >= weekStart
   })
@@ -2504,6 +2499,7 @@ function subscribeToEval(userId) {
       .map((d) => ({
         id: d.id,
         r: d.data().r ?? 0,
+        accountId: d.data().accountId ?? null,
         session: d.data().session ?? 'Sesion',
         rules: d.data().rules ?? 1,
         note: d.data().note ?? '',
@@ -2713,6 +2709,14 @@ function handlePageHide() {
 }
 
 async function addTrade() {
+  if (!accountsReady.value) {
+    tradeError.value = 'Espera a que se carguen las cuentas antes de registrar un trade.'
+    return
+  }
+  if (tradingAccounts.value.length && !selectedTradingAccount.value) {
+    tradeError.value = 'Selecciona una cuenta de trading antes de registrar el trade.'
+    return
+  }
   if (savingTrade.value) {
     return
   }
@@ -2762,6 +2766,7 @@ async function addTrade() {
   const parsedTradeDate = normalizeDate(tradeDate.value || new Date()) || new Date()
 
   const payload = {
+    accountId: selectedTradingAccount.value?.id ?? null,
     r: rVal,
     session: String(tradeSession.value || 'Sesion').slice(0, 40),
     note: String(tradeNote.value || '').slice(0, 140),
@@ -2797,13 +2802,16 @@ async function addTrade() {
       const snap = await getDocsFromServer(collection(db, 'users', user.value.uid, 'trades'))
       const serverTrades = snap.docs.map((d) => ({
         r: d.data().r ?? 0,
+        accountId: d.data().accountId ?? null,
         rBase: d.data().rBase,
         tradeDate: normalizeFirestoreDate(d.data().tradeDate),
         createdAt: normalizeFirestoreDate(d.data().createdAt) ?? new Date(),
         clientId: d.data().clientId ?? null,
       }))
 
-      const allRiskTrades = [...pendingTrades.value, ...serverTrades]
+      const allRiskTrades = [...pendingTrades.value, ...serverTrades].filter((trade) =>
+        tradeMatchesAccount(trade, payload.accountId || 'unassigned'),
+      )
       const seenClientIds = new Set()
       const dedupedTrades = allRiskTrades.filter((trade) => {
         if (!trade.clientId) return true
@@ -2937,7 +2945,7 @@ function cancelEditTrade() {
 }
 
 async function saveEditedTrade(tradeId) {
-  const currentTrade = tradesList.value.find((trade) => trade.id === tradeId)
+  const currentTrade = calendarSourceTrades.value.find((trade) => trade.id === tradeId)
   if (!currentTrade || !editingTradeDraft.value) {
     cancelEditTrade()
     return
@@ -2992,8 +3000,9 @@ async function saveEditedTrade(tradeId) {
 }
 
 async function removeTrade(tradeId) {
-  const currentTrade = tradesList.value.find((trade) => trade.id === tradeId)
-  if (currentTrade?.source === 'ninjatrader') {
+  const currentTrade = calendarSourceTrades.value.find((trade) => trade.id === tradeId)
+  if (!currentTrade) return
+  if (currentTrade.source === 'ninjatrader') {
     tradeError.value = 'Los trades de NinjaTrader vienen de ejecuciones sincronizadas y no se borran desde el diario manual.'
     return
   }
@@ -3960,6 +3969,12 @@ function openNewTrade() {
   closeSidebarOnMobile()
 }
 
+watch(selectedTradingAccountId, () => {
+  cancelEditTrade()
+  tradeInput.value = ''
+  tradeNote.value = ''
+})
+
 watch(activeSection, (section) => {
   if (section === 'mercado' && !marketNews.value.length && !marketNewsLoading.value) {
     fetchMarketNews()
@@ -4004,6 +4019,12 @@ watch(activeSection, (section) => {
     <nav class="sidebar" :class="{ 'sidebar--open': sidebarOpen }">
       <div class="sidebar-brand">📈 NasdaqMentor</div>
       <ul class="sidebar-menu">
+        <li>
+          <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'cuentas' }" @click="openSection('cuentas')">
+            <span class="sidebar-icon">🗂️</span>
+            <span class="sidebar-label">Crear cuenta</span>
+          </button>
+        </li>
         <li>
           <button class="sidebar-item" :class="{ 'sidebar-item--active': activeSection === 'evaluacion' }" @click="openNewTrade">
             <span class="sidebar-icon">➕</span>
@@ -4127,6 +4148,7 @@ watch(activeSection, (section) => {
 
     <!-- Main content -->
     <main class="page-shell main-area" :class="{ 'main-area--shifted': sidebarOpen }">
+      <TradingAccountPanel v-if="['cuentas', 'evaluacion', 'dashboard'].includes(activeSection)" :state="accountState" :creating="activeSection === 'cuentas'" :signed-in="!!user" :saving-trade="savingTrade" @navigate="openSection" />
       <div class="floating-actions">
         <button
           class="floating-circle-btn floating-mute-btn"
@@ -4357,7 +4379,7 @@ watch(activeSection, (section) => {
       </section>
 
       <section v-show="activeSection === 'evaluacion'" id="evaluacion" class="eval-panel">
-        <div class="account-lifecycle-card">
+        <div v-if="!tradingAccounts.length" class="account-lifecycle-card">
           <div class="account-lifecycle-header">
             <div>
               <p class="filter-eyebrow">Cuenta de trading</p>
@@ -4685,10 +4707,10 @@ watch(activeSection, (section) => {
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!tradesList.length">
+              <tr v-if="!calendarSourceTrades.length">
                 <td colspan="8" class="empty-row">Aun no hay trades registrados</td>
               </tr>
-              <tr v-for="trade in tradesList.slice(0, 8)" :key="trade.id">
+              <tr v-for="trade in calendarSourceTrades.slice(0, 8)" :key="trade.id">
                 <template v-if="editingTradeId === trade.id && editingTradeDraft">
                   <td>
                     <input v-model.number="editingTradeDraft.usd" class="eval-inline-input" type="number" step="0.01" inputmode="decimal" />
@@ -4783,7 +4805,7 @@ watch(activeSection, (section) => {
           </table>
         </div>
 
-        <PnlChart ref="pnlChartRef" :trades="tradesList" :one-r="evalOneR" />
+        <PnlChart ref="pnlChartRef" :trades="calendarSourceTrades" :one-r="evalOneR" />
 
         <div class="eval-calendar-head">
           <div>
