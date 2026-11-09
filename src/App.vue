@@ -29,7 +29,6 @@ import {
 import { getStorage, ref as sRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage'
 import { auth, db, loginWithGoogle, logout } from './firebase'
 
-const maxTasks = 10
 const user = ref(null)
 const accountState = useTradingAccounts(user)
 const { accounts: tradingAccounts, selectedId: selectedTradingAccountId, selected: selectedTradingAccount, ready: accountsReady } = accountState
@@ -82,6 +81,7 @@ const loading = ref(false)
 const authError = ref('')
 const taskInput = ref('')
 const taskError = ref('')
+const savingTask = ref(false)
 const tasks = ref([])
 let unsubscribeTasks = null
 
@@ -124,11 +124,20 @@ async function onDrop(toIndex) {
 }
 
 async function saveOrder() {
-  const batch = writeBatch(db)
-  tasks.value.forEach((task, index) => {
-    batch.update(doc(db, 'users', user.value.uid, 'tasks', task.id), { order: index })
-  })
-  await batch.commit()
+  const userId = user.value.uid
+  const orderedTasks = [...tasks.value]
+  try {
+    for (let offset = 0; offset < orderedTasks.length; offset += 450) {
+      const batch = writeBatch(db)
+      orderedTasks.slice(offset, offset + 450).forEach((task, index) => {
+        batch.update(doc(db, 'users', userId, 'tasks', task.id), { order: offset + index })
+      })
+      await batch.commit()
+    }
+  } catch (error) {
+    taskError.value = 'No se pudo guardar el orden de las tareas. Intenta de nuevo.'
+    console.error(error)
+  }
 }
 
 // ── TTS ──────────────────────────────────────────────────────────
@@ -3079,7 +3088,7 @@ function loadTasks() {
 
   try {
     const parsedTasks = JSON.parse(rawTasks)
-    tasks.value = Array.isArray(parsedTasks) ? parsedTasks.slice(0, maxTasks) : []
+    tasks.value = Array.isArray(parsedTasks) ? parsedTasks : []
   } catch {
     tasks.value = []
   }
@@ -3122,43 +3131,35 @@ function subscribeToTasks(userId) {
 }
 
 async function addTask() {
-  const title = taskInput.value.trim()
-
-  if (!title || tasks.value.length >= maxTasks) {
-    return
-  }
-
-  const wordCount = title.split(/\s+/).filter(Boolean).length
-  if (wordCount > 12) {
-    taskError.value = 'Cada tarea puede tener maximo 12 palabras.'
-    return
-  }
-
+  const originalInput = taskInput.value
+  const title = originalInput.trim()
+  if (!title || savingTask.value) return
+  savingTask.value = true
   taskError.value = ''
-
-  if (user.value) {
-    const batch = writeBatch(db)
-    const newRef = doc(collection(db, 'users', user.value.uid, 'tasks'))
-    batch.set(newRef, {
-      title,
-      completed: false,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      order: 0,
-    })
-    tasks.value.forEach((task, index) => {
-      batch.update(doc(db, 'users', user.value.uid, 'tasks', task.id), { order: index + 1 })
-    })
-    await batch.commit()
-  } else {
-    tasks.value.unshift({
-      id: crypto.randomUUID(),
-      title,
-      completed: false,
-    })
+  const ownerId = user.value?.uid
+  try {
+    if (ownerId) {
+      const firstOrder = tasks.value.reduce((minimum, task) =>
+        typeof task.order === 'number' && Number.isFinite(task.order) ? Math.min(minimum, task.order) : minimum, 0)
+      await addDoc(collection(db, 'users', ownerId, 'tasks'), {
+        title,
+        completed: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        order: firstOrder - 1,
+      })
+    } else {
+      const nextTasks = [{ id: crypto.randomUUID(), title, completed: false }, ...tasks.value]
+      localStorage.setItem(guestStorageKey, JSON.stringify(nextTasks))
+      tasks.value = nextTasks
+    }
+    if (ownerId === user.value?.uid && taskInput.value === originalInput) taskInput.value = ''
+  } catch (error) {
+    if (ownerId === user.value?.uid) taskError.value = 'No se pudo guardar la tarea. El texto sigue en el campo para que puedas copiarlo o reintentar.'
+    console.error(error)
+  } finally {
+    savingTask.value = false
   }
-
-  taskInput.value = ''
 }
 
 async function toggleTask(taskId) {
@@ -3227,7 +3228,12 @@ async function handleLogout() {
 
 watch(tasks, () => {
   if (!user.value) {
-    persistTasks()
+    try {
+      persistTasks()
+    } catch (error) {
+      taskError.value = 'No se pudieron guardar los cambios de las tareas en este navegador.'
+      console.error(error)
+    }
   }
 }, { deep: true })
 
@@ -4201,27 +4207,28 @@ watch(activeSection, (section) => {
           <strong>{{ pendingCount }}</strong>
         </div>
         <div class="stat-pill">
-          <span>Maximo</span>
-          <strong>{{ maxTasks }}</strong>
+          <span>Total</span>
+          <strong>{{ tasks.length }}</strong>
         </div>
       </div>
 
       <div class="input-row">
-        <input
+        <textarea
           v-model="taskInput"
           class="task-input"
-          type="text"
-          maxlength="120"
-          placeholder="Ejemplo: Esperar confirmacion en zona"
-          @keydown.enter="addTask"
-        />
-        <button class="primary-button" :disabled="tasks.length >= maxTasks" @click="addTask">
-          Agregar
+          rows="3"
+          aria-label="Nueva tarea"
+          placeholder="Escribe tu tarea con todos los detalles que necesites"
+          @keydown.ctrl.enter.prevent="addTask"
+          @keydown.meta.enter.prevent="addTask"
+        ></textarea>
+        <button class="primary-button" :disabled="savingTask || !taskInput.trim()" @click="addTask">
+          {{ savingTask ? 'Guardando…' : 'Agregar' }}
         </button>
       </div>
 
-      <p class="helper-text">Puedes crear hasta {{ maxTasks }} tareas para el dia.</p>
-      <p class="helper-text">Cada tarea debe tener maximo 12 palabras.</p>
+      <p class="helper-text">Agrega las tareas que necesites, sin tope de cantidad ni de palabras en la aplicación.</p>
+      <p class="helper-text">Enter crea un nuevo párrafo. Ctrl + Enter o ⌘ + Enter agrega la tarea.</p>
       <p v-if="taskError" class="error-banner" style="margin-top: 0.5rem;">{{ taskError }}</p>
 
       <div class="progress-section">
@@ -4241,16 +4248,16 @@ watch(activeSection, (section) => {
 
           <div class="progress-3d__markers">
             <span
-              v-for="number in maxTasks"
+              v-for="number in 10"
               :key="number"
               class="progress-marker"
-              :class="{ completed: number <= completedCount }"
+              :class="{ completed: number * 10 <= progressValue }"
             ></span>
           </div>
         </div>
 
         <div class="progress-caption">
-          {{ completedCount }} de {{ maxTasks }} tareas completadas
+          {{ completedCount }} de {{ tasks.length }} tareas completadas
         </div>
       </div>
 
